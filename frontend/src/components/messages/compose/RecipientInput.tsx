@@ -1,0 +1,134 @@
+import React, { useEffect, useState } from 'react';
+import { Autocomplete, Avatar, Box, Chip, CircularProgress, TextField, Typography } from '@mui/material';
+import { contactService } from '../../../services';
+import type { Contact } from '../../../types';
+import { resolveMediaUrl } from '../../../utils/media';
+
+interface RecipientInputProps {
+  value: string[];
+  onChange: (ids: string[]) => void;
+  label?: string;
+  placeholder?: string;
+}
+
+const RecipientInput: React.FC<RecipientInputProps> = ({
+  value,
+  onChange,
+  label = 'Кому',
+  placeholder = 'Введите имя или email сотрудника',
+}) => {
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<Contact[]>([]);
+  const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (value.length === 0) {
+      setSelectedContacts([]);
+      return;
+    }
+
+    let active = true;
+    void Promise.all(value.map((id) => contactService.getById(id).catch(() => null))).then((contacts) => {
+      if (!active) return;
+
+      const resolved = contacts.filter((contact): contact is Contact => Boolean(contact));
+      setSelectedContacts(resolved);
+      setOptions((prev) => {
+        const map = new Map<string, Contact>();
+        [...prev, ...resolved].forEach((contact) => map.set(contact.id, contact));
+        return Array.from(map.values());
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [value]);
+
+  const handleInputChange = async (_event: React.SyntheticEvent, inputValue: string) => {
+    if (inputValue.length < 2) {
+      setOptions(selectedContacts);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await contactService.search(1, 20, inputValue);
+      setOptions(() => {
+        const map = new Map<string, Contact>();
+        [...selectedContacts, ...(response.data || [])].forEach((contact) => map.set(contact.id, contact));
+        return Array.from(map.values());
+      });
+    } catch (error) {
+      console.error('Failed to search contacts', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Autocomplete
+      multiple
+      open={open}
+      value={selectedContacts}
+      onOpen={() => setOpen(true)}
+      onClose={() => setOpen(false)}
+      isOptionEqualToValue={(option, selected) => option.id === selected.id}
+      getOptionLabel={(option) => `${option.lastName} ${option.firstName}`}
+      options={options}
+      loading={loading}
+      onInputChange={handleInputChange}
+      onChange={(_event, newValue) => {
+        setSelectedContacts(newValue);
+        onChange(newValue.map((user) => user.id));
+      }}
+      renderOption={(props, option) => (
+        <li {...props}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Avatar src={resolveMediaUrl(option.avatarUrl)} sx={{ width: 24, height: 24, mr: 1 }}>
+              {option.firstName[0]}
+            </Avatar>
+            <Box>
+              <Typography variant="body2">
+                {option.lastName} {option.firstName} {option.middleName}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {option.email} {option.position ? ` • ${option.position}` : ''}
+              </Typography>
+            </Box>
+          </Box>
+        </li>
+      )}
+      renderTags={(tagValue, getTagProps) =>
+        tagValue.map((option, index) => (
+          <Chip
+            avatar={<Avatar src={resolveMediaUrl(option.avatarUrl)}>{option.firstName[0]}</Avatar>}
+            label={`${option.lastName} ${option.firstName}`}
+            {...getTagProps({ index })}
+            key={option.id}
+            size="small"
+          />
+        ))
+      }
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          placeholder={placeholder}
+          InputProps={{
+            ...params.InputProps,
+            endAdornment: (
+              <>
+                {loading ? <CircularProgress color="inherit" size={20} /> : null}
+                {params.InputProps.endAdornment}
+              </>
+            ),
+          }}
+        />
+      )}
+    />
+  );
+};
+
+export default RecipientInput;
