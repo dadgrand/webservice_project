@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build artifacts
+dist/
+backend/dist/
+frontend/dist/
+
+# Logs and runtime files
+*.log
+*.pid
+backend/logs/
+
+# Test artifacts
+frontend/playwright-report/
+frontend/test-results/
+test-results/
+artifacts/
+
+# Local env files
+.env
+.env.*
+backend/.env
+frontend/.env
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
+# Local generated uploads
+backend/uploads/
+
+# Local working directories
+backups/
+.run/
+
+# OS files
+.DS_Store
