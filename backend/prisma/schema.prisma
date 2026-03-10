@@ -1,0 +1,724 @@
+// Hospital Staff Web Service - Prisma Schema
+// Гибкая система ролей и разрешений
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ОРГАНИЗАЦИОННАЯ СТРУКТУРА ====================
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  parentId    String? // Для иерархии
+  headId      String? // Руководитель отделения
+  order       Int      @default(0)
+  color       String? // Цвет для визуализации в древе
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent                Department?                @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children              Department[]               @relation("DepartmentHierarchy")
+  employees             User[]                     @relation("DepartmentEmployees")
+  head                  User?                      @relation("DepartmentHead", fields: [headId], references: [id])
+  orgTreeNodes          OrgTreeNode[]
+  documentThreadTargets DocumentThreadDepartment[]
+
+  @@map("departments")
+}
+
+// ==================== ПОЛЬЗОВАТЕЛИ И ПРАВА ====================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  middleName    String?
+  position      String? // Должность
+  departmentId  String? // Связь с отделением
+  phone         String?
+  phoneInternal String? // Внутренний номер
+  avatarUrl     String?
+  bio           String? // Краткое описание / О себе
+  birthDate     DateTime?
+  hireDate      DateTime? // Дата приема на работу
+  isActive      Boolean   @default(true)
+  isAdmin       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Связи
+  department               Department?                    @relation("DepartmentEmployees", fields: [departmentId], references: [id])
+  headOfDepartments        Department[]                   @relation("DepartmentHead")
+  permissions              UserPermission[]
+  sentMessages             Message[]                      @relation("SentMessages")
+  receivedMessages         MessageRecipient[]
+  messageFolders           MessageFolder[]
+  messageLabels            MessageLabel[]
+  messageDrafts            MessageDraft[]
+  favoriteContacts         FavoriteContact[]              @relation("UserFavorites")
+  favoritedBy              FavoriteContact[]              @relation("FavoritedBy")
+  orgTreeNodes             OrgTreeNode[]                  @relation("OrgTreeLinkedUser")
+  documents                Document[]
+  createdDocumentThreads   DocumentThread[]
+  documentThreadRecipients DocumentThreadRecipient[]
+  createdDocumentGroups    DocumentRecipientGroup[]
+  documentGroupMemberships DocumentRecipientGroupMember[]
+  documentApprovalActions  DocumentApprovalAction[]
+  createdCourses           Course[]
+  courseProgress           CourseProgress[]
+  createdTests             Test[]
+  testAttempts             TestAttempt[]
+  createdNews              News[]
+  activityLogs             ActivityLog[]
+
+  @@index([departmentId])
+  @@index([lastName, firstName])
+  @@map("users")
+}
+
+// Разрешения (гранулярные права)
+model Permission {
+  id          String   @id @default(uuid())
+  code        String   @unique // например: "tests.edit", "learning.stats"
+  name        String // Человекочитаемое название
+  description String?
+  category    String // Категория: tests, learning, documents, messages, stats
+  createdAt   DateTime @default(now())
+
+  users UserPermission[]
+
+  @@map("permissions")
+}
+
+// Связь пользователь-разрешение (many-to-many)
+model UserPermission {
+  id           String   @id @default(uuid())
+  userId       String
+  permissionId String
+  grantedAt    DateTime @default(now())
+  grantedBy    String? // ID админа, который выдал право
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@map("user_permissions")
+}
+
+// ==================== СООБЩЕНИЯ ====================
+
+// Папки для организации сообщений
+model MessageFolder {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  type      String   @default("custom") // system: inbox, sent, drafts, trash, archive | custom
+  icon      String? // Иконка папки (для кастомных)
+  color     String? // Цвет папки
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages MessageRecipient[] @relation("RecipientFolder")
+
+  @@unique([userId, name])
+  @@index([userId, type])
+  @@map("message_folders")
+}
+
+// Метки/теги для сообщений
+model MessageLabel {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  color     String   @default("#1976d2")
+  createdAt DateTime @default(now())
+
+  user     User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages MessageLabelAssignment[]
+
+  @@unique([userId, name])
+  @@map("message_labels")
+}
+
+// Связь сообщение-метка (many-to-many)
+model MessageLabelAssignment {
+  id          String   @id @default(uuid())
+  recipientId String // Ссылка на MessageRecipient (каждый получатель может иметь свои метки)
+  labelId     String
+  assignedAt  DateTime @default(now())
+
+  recipient MessageRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  label     MessageLabel     @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([recipientId, labelId])
+  @@map("message_label_assignments")
+}
+
+// Цепочка сообщений (тред)
+model MessageThread {
+  id        String   @id @default(uuid())
+  subject   String // Тема цепочки (из первого сообщения)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  @@map("message_threads")
+}
+
+// Черновики сообщений
+model MessageDraft {
+  id            String   @id @default(uuid())
+  userId        String
+  subject       String   @default("")
+  content       String   @default("")
+  recipientIds  Json     @default("[]") // Массив ID получателей
+  ccIds         Json     @default("[]") // Массив ID получателей в копии
+  bccIds        Json     @default("[]") // Массив ID скрытой копии
+  isImportant   Boolean  @default(false)
+  replyToId     String? // Если это ответ на сообщение
+  forwardFromId String? // Если это пересылка
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replyTo     Message?                 @relation("DraftReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
+  forwardFrom Message?                 @relation("DraftForwardFrom", fields: [forwardFromId], references: [id], onDelete: SetNull)
+  attachments MessageDraftAttachment[]
+
+  @@index([userId])
+  @@map("message_drafts")
+}
+
+// Вложения к черновикам
+model MessageDraftAttachment {
+  id        String   @id @default(uuid())
+  draftId   String
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  draft MessageDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@map("message_draft_attachments")
+}
+
+// Основная модель сообщения
+model Message {
+  id              String    @id @default(uuid())
+  senderId        String
+  subject         String
+  content         String
+  isImportant     Boolean   @default(false)
+  threadId        String? // Цепочка сообщений
+  replyToId       String? // Ответ на сообщение
+  forwardedFromId String? // Пересланное из
+  senderDeletedAt DateTime? // Удалено отправителем
+  createdAt       DateTime  @default(now())
+
+  sender        User                @relation("SentMessages", fields: [senderId], references: [id])
+  thread        MessageThread?      @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  replyTo       Message?            @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies       Message[]           @relation("MessageReplies")
+  forwardedFrom Message?            @relation("MessageForwards", fields: [forwardedFromId], references: [id], onDelete: SetNull)
+  forwards      Message[]           @relation("MessageForwards")
+  recipients    MessageRecipient[]
+  attachments   MessageAttachment[]
+  draftReplies  MessageDraft[]      @relation("DraftReplyTo")
+  draftForwards MessageDraft[]      @relation("DraftForwardFrom")
+
+  @@index([senderId])
+  @@index([threadId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+// Получатели сообщения
+model MessageRecipient {
+  id         String    @id @default(uuid())
+  messageId  String
+  userId     String
+  type       String    @default("to") // to, cc, bcc
+  folderId   String? // Папка пользователя
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  isStarred  Boolean   @default(false) // Помечено звёздочкой
+  deletedAt  DateTime? // Soft delete (перемещение в корзину)
+  archivedAt DateTime? // Архивировано
+
+  message Message                  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder  MessageFolder?           @relation("RecipientFolder", fields: [folderId], references: [id], onDelete: SetNull)
+  labels  MessageLabelAssignment[]
+
+  @@unique([messageId, userId])
+  @@index([userId, isRead])
+  @@index([userId, deletedAt])
+  @@index([userId, folderId])
+  @@map("message_recipients")
+}
+
+// Вложения к сообщениям
+model MessageAttachment {
+  id        String   @id @default(uuid())
+  messageId String
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_attachments")
+}
+
+// Избранные контакты пользователя
+model FavoriteContact {
+  id        String   @id @default(uuid())
+  userId    String // Пользователь, который добавил в избранное
+  contactId String // Контакт, добавленный в избранное
+  createdAt DateTime @default(now())
+
+  user    User @relation("UserFavorites", fields: [userId], references: [id], onDelete: Cascade)
+  contact User @relation("FavoritedBy", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contactId])
+  @@map("favorite_contacts")
+}
+
+// Узлы организационного древа (гибридный вариант)
+model OrgTreeNode {
+  id             String   @id @default(uuid())
+  parentId       String? // Родительский узел
+  type           String   @default("custom") // department, position, custom
+  departmentId   String? // Ссылка на отделение (если type = department)
+  linkedUserId   String? // Ссылка на пользователя (для отображения в узле)
+  customTitle    String? // Заголовок для кастомных узлов
+  customSubtitle String? // Подзаголовок
+  customImageUrl String? // Изображение для кастомных узлов
+  linkUrl        String? // Ссылка при клике
+  order          Int      @default(0)
+  style          Json? // Стили: цвет, размер, иконка и т.д.
+  isVisible      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  parent     OrgTreeNode?  @relation("OrgTreeHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children   OrgTreeNode[] @relation("OrgTreeHierarchy")
+  department Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  linkedUser User?         @relation("OrgTreeLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
+
+  @@index([parentId])
+  @@index([departmentId])
+  @@map("org_tree_nodes")
+}
+
+// ==================== НОВОСТИ ====================
+
+model News {
+  id          String    @id @default(uuid())
+  title       String
+  content     String
+  isPinned    Boolean   @default(false)
+  authorId    String
+  publishedAt DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  author User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media  NewsMedia[]
+
+  @@index([isPinned, publishedAt])
+  @@index([authorId])
+  @@map("news")
+}
+
+model NewsMedia {
+  id        String   @id @default(uuid())
+  newsId    String
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  news News @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@index([newsId, order])
+  @@map("news_media")
+}
+
+// ==================== ДОКУМЕНТООБОРОТ ====================
+
+model DocumentCategory {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  parentId    String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  parent    DocumentCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  DocumentCategory[] @relation("CategoryHierarchy")
+  documents Document[]
+
+  @@map("document_categories")
+}
+
+model Document {
+  id           String    @id @default(uuid())
+  title        String
+  description  String?
+  categoryId   String?
+  threadId     String?
+  fileName     String
+  fileUrl      String
+  fileSize     Int
+  mimeType     String
+  version      Int       @default(1)
+  uploadedById String
+  isPublished  Boolean   @default(true)
+  isActive     Boolean   @default(true)
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  category   DocumentCategory? @relation(fields: [categoryId], references: [id])
+  thread     DocumentThread?   @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  uploadedBy User              @relation(fields: [uploadedById], references: [id])
+
+  @@index([threadId])
+  @@index([uploadedById])
+  @@map("documents")
+}
+
+model DocumentThread {
+  id                  String    @id @default(uuid())
+  title               String
+  description         String?
+  mode                String    @default("distribution") // distribution, read_receipt, approval
+  distributionType    String    @default("individual") // all, departments, groups, individual
+  status              String    @default("new") // new, in_progress, changes_requested, completed
+  requiresReadReceipt Boolean   @default(false)
+  createdById         String
+  isCompleted         Boolean   @default(false)
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  createdBy   User                       @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  recipients  DocumentThreadRecipient[]
+  departments DocumentThreadDepartment[]
+  groups      DocumentThreadGroup[]
+  files       Document[]
+  actions     DocumentApprovalAction[]
+
+  @@index([createdById])
+  @@index([status])
+  @@index([mode])
+  @@map("document_threads")
+}
+
+model DocumentThreadRecipient {
+  id              String    @id @default(uuid())
+  threadId        String
+  userId          String
+  isRead          Boolean   @default(false)
+  readAt          DateTime?
+  decision        String? // approved, changes_requested
+  decisionComment String?
+  decidedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  thread DocumentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId, isRead])
+  @@map("document_thread_recipients")
+}
+
+model DocumentThreadDepartment {
+  id           String @id @default(uuid())
+  threadId     String
+  departmentId String
+
+  thread     DocumentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  department Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, departmentId])
+  @@map("document_thread_departments")
+}
+
+model DocumentThreadGroup {
+  id       String @id @default(uuid())
+  threadId String
+  groupId  String
+
+  thread DocumentThread         @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  group  DocumentRecipientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, groupId])
+  @@map("document_thread_groups")
+}
+
+model DocumentRecipientGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User                           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  members   DocumentRecipientGroupMember[]
+  threads   DocumentThreadGroup[]
+
+  @@unique([createdById, name])
+  @@index([createdById])
+  @@map("document_recipient_groups")
+}
+
+model DocumentRecipientGroupMember {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  createdAt DateTime @default(now())
+
+  group DocumentRecipientGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@map("document_recipient_group_members")
+}
+
+model DocumentApprovalAction {
+  id        String   @id @default(uuid())
+  threadId  String
+  userId    String
+  action    String // approved, changes_requested, resubmitted, commented
+  comment   String?
+  createdAt DateTime @default(now())
+
+  thread DocumentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("document_approval_actions")
+}
+
+// ==================== ОБУЧАЮЩИЙ МОДУЛЬ ====================
+
+model Course {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  coverImage  String?
+  authorId    String
+  materialType String   @default("single_page") // single_page | multi_page
+  assignToAll Boolean  @default(false)
+  assignedUserIds Json @default("[]")
+  assignedDepartmentIds Json @default("[]")
+  expiresAt   DateTime?
+  isPublished Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author   User             @relation(fields: [authorId], references: [id])
+  modules  CourseModule[]
+  progress CourseProgress[]
+
+  @@map("courses")
+}
+
+model CourseModule {
+  id          String   @id @default(uuid())
+  courseId    String
+  title       String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@map("course_modules")
+}
+
+model Lesson {
+  id          String   @id @default(uuid())
+  moduleId    String
+  title       String
+  content     String? // HTML/Markdown контент
+  videoUrl    String?
+  order       Int      @default(0)
+  durationMin Int? // Примерная длительность в минутах
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  module      CourseModule       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  attachments LessonAttachment[]
+  quizzes     LessonQuiz[]
+
+  @@map("lessons")
+}
+
+model LessonAttachment {
+  id        String   @id @default(uuid())
+  lessonId  String
+  title     String
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("lesson_attachments")
+}
+
+// Мини-квиз внутри урока
+model LessonQuiz {
+  id           String @id @default(uuid())
+  lessonId     String
+  question     String
+  options      Json // ["Вариант 1", "Вариант 2", ...]
+  correctIndex Int // Индекс правильного ответа
+  order        Int    @default(0)
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("lesson_quizzes")
+}
+
+// Прогресс прохождения курса
+model CourseProgress {
+  id               String    @id @default(uuid())
+  userId           String
+  courseId         String
+  completedLessons Json      @default("[]") // Массив ID завершенных уроков
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+  progressPercent  Int       @default(0)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("course_progress")
+}
+
+// ==================== ТЕСТИРОВАНИЕ ====================
+
+model Test {
+  id               String   @id @default(uuid())
+  title            String
+  description      String?
+  authorId         String
+  assignToAll      Boolean  @default(false)
+  assignedUserIds  Json     @default("[]")
+  assignedDepartmentIds Json @default("[]")
+  timeLimit        Int? // Лимит времени в минутах (null = без лимита)
+  passingScore     Int      @default(70) // Проходной балл в процентах
+  shuffleQuestions Boolean  @default(false)
+  showResults      Boolean  @default(true) // Показывать результаты после прохождения
+  showCorrectAnswers Boolean @default(true) // Показывать правильные/неправильные ответы
+  maxAttempts      Int? // Макс. количество попыток (null = неограничено)
+  isPublished      Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  author    User           @relation(fields: [authorId], references: [id])
+  questions TestQuestion[]
+  attempts  TestAttempt[]
+
+  @@map("tests")
+}
+
+model TestQuestion {
+  id            String  @id @default(uuid())
+  testId        String
+  stageTitle    String?
+  stageDescription String?
+  question      String
+  questionType  String // single, multiple, text
+  options       Json? // Варианты ответов для single/multiple
+  correctAnswer Json // Правильный ответ(ы)
+  media         Json   @default("[]") // Файлы этапа: фото/видео/документы
+  manualCheck   Boolean @default(false) // Только ручная проверка для текстового вопроса
+  points        Int     @default(1)
+  order         Int     @default(0)
+  explanation   String? // Объяснение правильного ответа
+
+  test Test @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@map("test_questions")
+}
+
+model TestAttempt {
+  id          String    @id @default(uuid())
+  testId      String
+  userId      String
+  answers     Json // Ответы пользователя
+  status      String    @default("completed") // completed | pending_review | reviewed
+  manualReviewRequired Boolean @default(false)
+  reviewedById String?
+  reviewedAt   DateTime?
+  scoreAuto    Int      @default(0)
+  scoreManual  Int      @default(0)
+  feedback     String?
+  score       Int // Набранные баллы
+  maxScore    Int // Максимально возможные баллы
+  percentage  Int // Процент правильных ответов
+  isPassed    Boolean // Прошел ли тест
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  timeSpent   Int? // Затраченное время в секундах
+
+  test Test @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("test_attempts")
+}
+
+// ==================== ЛОГИРОВАНИЕ ====================
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String // login, logout, create, update, delete, view
+  entity    String // user, document, course, test, message
+  entityId  String?
+  details   Json? // Дополнительные детали
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
