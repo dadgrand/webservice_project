@@ -141,22 +141,74 @@ http://<IP_сервера>:8080
 
 При первом старте backend сам применит миграции и создаст первого администратора из переменных `BOOTSTRAP_ADMIN_EMAIL` и `BOOTSTRAP_ADMIN_PASSWORD`.
 
+## Что было исправлено перед передачей
+
+Во время проверки запуска на чистом ПК выяснилось, что репозиторий и инструкция были рассчитаны в первую очередь на локальную разработку, а не на быстрый production-запуск у заказчика. Из-за этого тестировщик не мог поднять систему «по README» без ручных правок.
+
+Что изменили:
+
+- в `docker-compose.yml` добавили полноценный запуск `backend` и `frontend`: раньше compose поднимал только `postgres`, а web-приложение нужно было запускать отдельно;
+- добавили корневой `.env.example` и описали обязательные переменные для production-запуска: `POSTGRES_PASSWORD`, `JWT_SECRET`, `FRONTEND_URLS`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`;
+- добавили `Dockerfile` для backend и frontend, чтобы проект можно было собрать и запустить одной командой `docker compose up -d --build`;
+- настроили `Nginx` во frontend-контейнере и проксирование `/api`, `/socket.io` и `/uploads`, чтобы frontend корректно работал за одним адресом `http://<IP_сервера>:8080`;
+- перевели frontend Docker-сборку на `VITE_API_URL=/api`, потому что прямой адрес `http://localhost:3001/api` подходит для разработки, но ломает работу на сервере;
+- добавили автоматическое применение миграций при старте backend-контейнера;
+- добавили bootstrap-создание первого администратора через `BOOTSTRAP_ADMIN_EMAIL` и `BOOTSTRAP_ADMIN_PASSWORD`, чтобы после первого запуска можно было сразу войти в систему без ручного seed для production;
+- разделили production- и demo-инициализацию: demo-аккаунты и тестовые данные остались только для локальной разработки.
+
 ## Для разработки
 
-Если проект нужно запускать локально без Docker:
+Если проект нужно запускать локально без полной Docker-сборки, удобнее оставить в контейнере только Postgres, а backend и frontend запускать в отдельных терминалах.
+
+Корневой `.env` нужен для `docker compose`. Для локального backend нужен отдельный файл `backend/.env`.
+
+1. Подготовить переменные окружения:
 
 ```bash
-# Backend
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+2. Поднять только Postgres:
+
+```bash
+docker compose up -d postgres
+```
+
+3. Установить зависимости и подготовить базу:
+
+```bash
 cd backend
 npm install
 npm run db:migrate:deploy
-npm run dev
+npm run db:seed
 
 # Frontend
 cd ../frontend
 npm install
+```
+
+4. Запустить backend и frontend в двух отдельных терминалах:
+
+```bash
+# Терминал 1
+cd backend
+npm run dev
+
+# Терминал 2
+cd frontend
 npm run dev
 ```
+
+Если нужен доступ к frontend с другого устройства в локальной сети, запускайте Vite так:
+
+```bash
+npm run dev -- --host 0.0.0.0
+```
+
+Важно: `npm run db:seed` нужен для локальной разработки, потому что именно он создаёт demo-пользователей `admin@hospital.local / admin123` и `nurse1@hospital.local / user123`.
+
+Если `backend` не может подключиться к Postgres после смены `POSTGRES_PASSWORD`, проблема обычно в старом Docker volume: пароль в уже инициализированной базе не меняется автоматически вместе с `.env`. В этом случае либо верните прежний пароль в `backend/.env`, либо пересоздайте volume Postgres и снова выполните `docker compose up -d postgres`.
 
 По умолчанию:
 
