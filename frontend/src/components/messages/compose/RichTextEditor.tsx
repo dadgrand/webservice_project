@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -35,6 +35,21 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
     },
   });
 
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+
+    const currentHtml = editor.getHTML();
+    if (currentHtml !== value) {
+      editor.commands.setContent(value || '<p></p>', { emitUpdate: false });
+    }
+  }, [editor, value]);
+
+  const keepSelection = (event: React.MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+  };
+
   if (!editor) {
     return null;
   }
@@ -47,6 +62,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
           <ToggleButton
             value="bold"
             selected={editor.isActive('bold')}
+            onMouseDown={keepSelection}
             onClick={() => editor.chain().focus().toggleBold().run()}
           >
             <FormatBold fontSize="small" />
@@ -54,6 +70,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
           <ToggleButton
             value="italic"
             selected={editor.isActive('italic')}
+            onMouseDown={keepSelection}
             onClick={() => editor.chain().focus().toggleItalic().run()}
           >
             <FormatItalic fontSize="small" />
@@ -66,6 +83,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
           <ToggleButton
             value="bulletList"
             selected={editor.isActive('bulletList')}
+            onMouseDown={keepSelection}
             onClick={() => editor.chain().focus().toggleBulletList().run()}
           >
             <FormatListBulleted fontSize="small" />
@@ -73,6 +91,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
           <ToggleButton
             value="orderedList"
             selected={editor.isActive('orderedList')}
+            onMouseDown={keepSelection}
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
           >
             <FormatListNumbered fontSize="small" />
@@ -85,6 +104,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
             <ToggleButton
                 value="blockquote"
                 selected={editor.isActive('blockquote')}
+                onMouseDown={keepSelection}
                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
             >
                 <FormatQuote fontSize="small" />
@@ -92,6 +112,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
              <ToggleButton
                 value="codeBlock"
                 selected={editor.isActive('codeBlock')}
+                onMouseDown={keepSelection}
                 onClick={() => editor.chain().focus().toggleCodeBlock().run()}
             >
                 <Code fontSize="small" />
@@ -110,7 +131,23 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({ value, onChange, placeh
       </Box>
 
       {/* Editor Content */}
-      <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2, '& .ProseMirror': { outline: 'none', height: '100%' } }}>
+      <Box
+        sx={{
+          flexGrow: 1,
+          overflowY: 'auto',
+          p: 2,
+          '& .ProseMirror': {
+            outline: 'none',
+            height: '100%',
+          },
+          '& .ProseMirror strong': {
+            fontWeight: 700,
+          },
+          '& .ProseMirror em': {
+            fontStyle: 'italic',
+          },
+        }}
+      >
         <EditorContent editor={editor} style={{ height: '100%' }} />
       </Box>
     </Box>

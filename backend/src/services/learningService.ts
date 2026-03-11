@@ -29,6 +29,16 @@ export interface CreateLearningMaterialInput {
   pages: LearningPageInput[];
 }
 
+interface LearningAccessContext {
+  userId: string;
+  isAdmin: boolean;
+  canEditMaterials: boolean;
+}
+
+interface ListMaterialsOptions extends LearningAccessContext {
+  archived?: boolean;
+}
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
@@ -86,6 +96,10 @@ function hasAssignment(
 function isExpired(expiresAt: Date | null): boolean {
   if (!expiresAt) return false;
   return expiresAt.getTime() < Date.now();
+}
+
+function canManageMaterials(context: Pick<LearningAccessContext, 'isAdmin' | 'canEditMaterials'>): boolean {
+  return context.isAdmin || context.canEditMaterials;
 }
 
 export async function getAudienceOptions() {
@@ -258,7 +272,27 @@ export async function createMaterial(authorId: string, payload: CreateLearningMa
   };
 }
 
-export async function listMaterialsForUser(userId: string, isAdmin: boolean, canEditMaterials: boolean) {
+export async function deleteMaterial(materialId: string): Promise<void> {
+  const material = await prisma.course.findUnique({
+    where: { id: materialId },
+    select: { id: true },
+  });
+
+  if (!material) {
+    throw new Error('Материал не найден');
+  }
+
+  await prisma.course.delete({
+    where: { id: materialId },
+  });
+}
+
+export async function listMaterialsForUser({
+  userId,
+  isAdmin,
+  canEditMaterials,
+  archived = false,
+}: ListMaterialsOptions) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { departmentId: true },
@@ -270,6 +304,7 @@ export async function listMaterialsForUser(userId: string, isAdmin: boolean, can
 
   const [materials, visits] = await Promise.all([
     prisma.course.findMany({
+      where: archived ? { archivedAt: { not: null } } : { archivedAt: null },
       include: {
         author: {
           select: {
@@ -287,7 +322,7 @@ export async function listMaterialsForUser(userId: string, isAdmin: boolean, can
           },
         },
       },
-      orderBy: [{ updatedAt: 'desc' }],
+      orderBy: archived ? [{ archivedAt: 'desc' }, { updatedAt: 'desc' }] : [{ updatedAt: 'desc' }],
     }),
     prisma.activityLog.groupBy({
       by: ['entityId'],
@@ -308,13 +343,15 @@ export async function listMaterialsForUser(userId: string, isAdmin: boolean, can
     }
   }
 
+  const canManage = canManageMaterials({ isAdmin, canEditMaterials });
+
   return materials
     .map((material) => {
       const materialExpired = isExpired(material.expiresAt);
       const assigned = hasAssignment(material, userId, user.departmentId);
-      const canEdit = isAdmin || canEditMaterials || material.authorId === userId;
-      const canOpen = canEdit || (material.isPublished && assigned && !materialExpired);
-      const visible = canEdit || (material.isPublished && assigned);
+      const canEdit = canManage || material.authorId === userId;
+      const canOpen = canEdit || (material.archivedAt === null && material.isPublished && assigned && !materialExpired);
+      const visible = material.archivedAt !== null ? canManage : canEdit || (material.isPublished && assigned);
 
       if (!visible) {
         return null;
@@ -332,6 +369,8 @@ export async function listMaterialsForUser(userId: string, isAdmin: boolean, can
         assignedUserIds: toStringArray(material.assignedUserIds),
         assignedDepartmentIds: toStringArray(material.assignedDepartmentIds),
         expiresAt: material.expiresAt,
+        archivedAt: material.archivedAt,
+        isArchived: material.archivedAt !== null,
         isExpired: materialExpired,
         canEdit,
         canOpen,
@@ -346,7 +385,7 @@ export async function listMaterialsForUser(userId: string, isAdmin: boolean, can
 }
 
 export async function getLearningSummary(userId: string, isAdmin: boolean, canEditMaterials: boolean) {
-  const materials = await listMaterialsForUser(userId, isAdmin, canEditMaterials);
+  const materials = await listMaterialsForUser({ userId, isAdmin, canEditMaterials, archived: false });
 
   const assignedCount = materials.filter((item) => item.canOpen && !item.canEdit).length;
   const viewedCount = materials.filter((item) => item.lastVisitedAt !== null).length;
@@ -400,9 +439,10 @@ export async function getMaterialById(materialId: string, userId: string, isAdmi
 
   const materialExpired = isExpired(material.expiresAt);
   const assigned = hasAssignment(material, userId, user.departmentId);
-  const canEdit = isAdmin || canEditMaterials || material.authorId === userId;
-  const canOpen = canEdit || (material.isPublished && assigned && !materialExpired);
-  const visible = canEdit || (material.isPublished && assigned);
+  const canManage = canManageMaterials({ isAdmin, canEditMaterials });
+  const canEdit = canManage || material.authorId === userId;
+  const canOpen = canEdit || (material.archivedAt === null && material.isPublished && assigned && !materialExpired);
+  const visible = material.archivedAt !== null ? canManage : canEdit || (material.isPublished && assigned);
 
   if (!visible) {
     return null;
@@ -434,6 +474,8 @@ export async function getMaterialById(materialId: string, userId: string, isAdmi
     assignedUserIds: toStringArray(material.assignedUserIds),
     assignedDepartmentIds: toStringArray(material.assignedDepartmentIds),
     expiresAt: material.expiresAt,
+    archivedAt: material.archivedAt,
+    isArchived: material.archivedAt !== null,
     isExpired: materialExpired,
     isPublished: material.isPublished,
     canEdit,
@@ -453,7 +495,7 @@ export async function recordVisit(
   pageId?: string
 ) {
   const material = await getMaterialById(materialId, userId, isAdmin, canEditMaterials);
-  if (!material || !material.canOpen) {
+  if (!material || !material.canOpen || material.isArchived) {
     return false;
   }
 
@@ -512,6 +554,7 @@ export async function getAccessibleFile(
                     assignedDepartmentIds: true,
                     expiresAt: true,
                     isPublished: true,
+                    archivedAt: true,
                   },
                 },
               },
@@ -527,10 +570,16 @@ export async function getAccessibleFile(
   }
 
   const material = attachment.lesson.module.course;
-  const canEdit = isAdmin || canEditMaterials || material.authorId === userId;
+  const canManage = canManageMaterials({ isAdmin, canEditMaterials });
+  if (material.archivedAt !== null && !canManage) {
+    return null;
+  }
+
+  const canEdit = canManage || material.authorId === userId;
   const canOpen =
     canEdit ||
-    (material.isPublished &&
+    (material.archivedAt === null &&
+      material.isPublished &&
       hasAssignment(material, userId, user.departmentId) &&
       !isExpired(material.expiresAt));
 
@@ -543,4 +592,44 @@ export async function getAccessibleFile(
     fileUrl: attachment.fileUrl,
     mimeType: attachment.mimeType,
   };
+}
+
+export async function archiveMaterial(materialId: string): Promise<void> {
+  const material = await prisma.course.findUnique({
+    where: { id: materialId },
+    select: { id: true, archivedAt: true },
+  });
+
+  if (!material) {
+    throw new Error('Материал не найден');
+  }
+
+  if (material.archivedAt) {
+    return;
+  }
+
+  await prisma.course.update({
+    where: { id: materialId },
+    data: { archivedAt: new Date() },
+  });
+}
+
+export async function restoreMaterial(materialId: string): Promise<void> {
+  const material = await prisma.course.findUnique({
+    where: { id: materialId },
+    select: { id: true, archivedAt: true },
+  });
+
+  if (!material) {
+    throw new Error('Материал не найден');
+  }
+
+  if (!material.archivedAt) {
+    return;
+  }
+
+  await prisma.course.update({
+    where: { id: materialId },
+    data: { archivedAt: null },
+  });
 }

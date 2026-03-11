@@ -24,6 +24,8 @@ import {
   CreateNewFolder,
   LabelOutlined,
   ForumOutlined,
+  ArchiveOutlined,
+  UnarchiveOutlined,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -46,6 +48,8 @@ const MessageView: React.FC = () => {
     fetchFolders,
     selectMessage,
     currentFolderType,
+    folders,
+    moveMessageToFolder,
   } = useMessageStore();
   const [message, setMessage] = useState<Message | null>(null);
   const [thread, setThread] = useState<MessageThread | null>(null);
@@ -54,6 +58,7 @@ const MessageView: React.FC = () => {
   const [actionAnchorEl, setActionAnchorEl] = useState<HTMLElement | null>(null);
   const [organizationMode, setOrganizationMode] = useState<'folder' | 'label' | null>(null);
   const canOrganizeMessage = currentFolderType !== 'drafts' && Boolean(message?.canOrganize || (message?.threadMessageCount ?? 0) > 1);
+  const archiveFolder = folders.find((folder) => folder.systemName === 'archive') || null;
 
   const loadSelectedMessage = useCallback(async (messageId: string) => {
     setLoading(true);
@@ -100,6 +105,21 @@ const MessageView: React.FC = () => {
     if (selectedMessageId) {
       await toggleStar(selectedMessageId);
       setIsStarred(!isStarred);
+    }
+  };
+
+  const handleArchiveToggle = async () => {
+    if (!message) {
+      return;
+    }
+
+    if (message.folderId && archiveFolder && message.folderId === archiveFolder.id) {
+      await moveMessageToFolder(message.id, null);
+      return;
+    }
+
+    if (archiveFolder) {
+      await moveMessageToFolder(message.id, archiveFolder.id);
     }
   };
 
@@ -301,6 +321,24 @@ const MessageView: React.FC = () => {
       </Box>
 
       <Menu anchorEl={actionAnchorEl} open={Boolean(actionAnchorEl)} onClose={() => setActionAnchorEl(null)}>
+        {archiveFolder && (
+          <MenuItem
+            onClick={() => {
+              void handleArchiveToggle();
+              setActionAnchorEl(null);
+            }}
+            disabled={!canOrganizeMessage}
+          >
+            {(message.folderId && archiveFolder.id === message.folderId) || currentFolderType === 'archive' ? (
+              <UnarchiveOutlined fontSize="small" sx={{ mr: 1 }} />
+            ) : (
+              <ArchiveOutlined fontSize="small" sx={{ mr: 1 }} />
+            )}
+            {(message.folderId && archiveFolder.id === message.folderId) || currentFolderType === 'archive'
+              ? 'Вернуть во входящие'
+              : 'Архивировать'}
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => {
             setOrganizationMode('folder');

@@ -17,6 +17,7 @@ import {
   IconButton,
   InputAdornment,
   LinearProgress,
+  Menu,
   MenuItem,
   Paper,
   Stack,
@@ -30,6 +31,7 @@ import {
 import Grid from '@mui/material/Grid2';
 import {
   Add,
+  Archive,
   CloudDownload,
   Delete,
   Image,
@@ -40,6 +42,7 @@ import {
   Save,
   Search,
   SmartDisplay,
+  Unarchive,
   Upload,
   Visibility,
   Warning,
@@ -78,6 +81,14 @@ interface CreateFormState {
   isPublished: boolean;
   pages: LearningPageDraft[];
 }
+
+interface LearningContextMenuState {
+  mouseX: number;
+  mouseY: number;
+  material: LearningMaterialListItem;
+}
+
+type LearningListMode = 'active' | 'archive';
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -199,6 +210,23 @@ function buildInitialForm(): CreateFormState {
     ],
   };
 }
+
+const learningPanelSx = {
+  backgroundColor: 'rgba(255,255,255,0.95)',
+  backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,252,254,0.94) 100%)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.72)',
+  overflow: 'hidden',
+};
+
+const learningSidebarCardSx = {
+  ...learningPanelSx,
+  borderRadius: '24px',
+};
+
+const learningMainCardSx = {
+  ...learningPanelSx,
+  borderRadius: '18px',
+};
 
 function toPayload(form: CreateFormState): CreateLearningMaterialRequest {
   return {
@@ -387,6 +415,7 @@ const LearningPage: React.FC = () => {
 
   const [summary, setSummary] = useState<LearningSummary | null>(null);
   const [materials, setMaterials] = useState<LearningMaterialListItem[]>([]);
+  const [materialListMode, setMaterialListMode] = useState<LearningListMode>('active');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<LearningMaterialDetail | null>(null);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -401,12 +430,14 @@ const LearningPage: React.FC = () => {
   const [audience, setAudience] = useState<LearningAudienceOptions | null>(null);
   const [loadingAudience, setLoadingAudience] = useState(false);
   const [createForm, setCreateForm] = useState<CreateFormState>(buildInitialForm);
+  const [materialContextMenu, setMaterialContextMenu] = useState<LearningContextMenuState | null>(null);
 
   const filteredMaterials = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return materials;
     return materials.filter((item) => item.title.toLowerCase().includes(query) || (item.description || '').toLowerCase().includes(query));
   }, [materials, search]);
+  const showArchivedMaterials = canEditLearning && materialListMode === 'archive';
 
   const activePage = useMemo(() => {
     if (!selectedMaterial || selectedMaterial.pages.length === 0) return null;
@@ -418,7 +449,10 @@ const LearningPage: React.FC = () => {
     setLoadingList(true);
     setError(null);
     try {
-      const [summaryData, listData] = await Promise.all([learningService.getSummary(), learningService.listMaterials()]);
+      const [summaryData, listData] = await Promise.all([
+        learningService.getSummary(),
+        learningService.listMaterials({ archived: showArchivedMaterials }),
+      ]);
       setSummary(summaryData);
       setMaterials(listData);
 
@@ -448,7 +482,7 @@ const LearningPage: React.FC = () => {
       setSelectedMaterial(detail);
       setSelectedPageId(detail.pages[0]?.id || null);
 
-      if (detail.canOpen) {
+      if (detail.canOpen && !detail.isArchived) {
         await learningService.markVisited(materialId);
       }
     } catch (detailError) {
@@ -463,7 +497,7 @@ const LearningPage: React.FC = () => {
   useEffect(() => {
     void loadSummaryAndMaterials(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [showArchivedMaterials]);
 
   useEffect(() => {
     if (selectedId) {
@@ -539,6 +573,10 @@ const LearningPage: React.FC = () => {
       setCreating(true);
       await learningService.createMaterial(toPayload(createForm));
       setCreateOpen(false);
+      if (showArchivedMaterials) {
+        setMaterialListMode('active');
+        return;
+      }
       await loadSummaryAndMaterials(false);
     } catch (createError) {
       setError((createError as Error).message || 'Не удалось создать материал');
@@ -547,62 +585,126 @@ const LearningPage: React.FC = () => {
     }
   };
 
-  const renderSummary = () => (
-    <Grid container spacing={2} sx={{ mb: 3 }}>
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box>
-                <Typography variant="body2" color="text.secondary">Назначено</Typography>
-                <Typography variant="h4">{summary?.assignedCount ?? 0}</Typography>
-              </Box>
-              <MenuBook color="primary" />
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box>
-                <Typography variant="body2" color="text.secondary">Просмотрено</Typography>
-                <Typography variant="h4">{summary?.viewedCount ?? 0}</Typography>
-              </Box>
-              <PlayArrow color="success" />
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box>
-                <Typography variant="body2" color="text.secondary">Просрочено</Typography>
-                <Typography variant="h4">{summary?.expiredCount ?? 0}</Typography>
-              </Box>
-              <Warning color="warning" />
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Box>
-                <Typography variant="body2" color="text.secondary">Доступно</Typography>
-                <Typography variant="h4">{summary?.totalAvailable ?? 0}</Typography>
-              </Box>
-              <Visibility color="info" />
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
-  );
+  const closeMaterialContextMenu = () => {
+    setMaterialContextMenu(null);
+  };
+
+  const openMaterialContextMenu = (event: React.MouseEvent<HTMLElement>, material: LearningMaterialListItem) => {
+    if (!canEditLearning) {
+      return;
+    }
+
+    event.preventDefault();
+    setSelectedId(material.id);
+    setMaterialContextMenu({
+      mouseX: event.clientX + 2,
+      mouseY: event.clientY - 6,
+      material,
+    });
+  };
+
+  const deleteMaterial = async () => {
+    if (!materialContextMenu) return;
+
+    const confirmed = window.confirm(`Удалить материал "${materialContextMenu.material.title}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await learningService.deleteMaterial(materialContextMenu.material.id);
+      closeMaterialContextMenu();
+      await loadSummaryAndMaterials(false);
+    } catch (deleteError) {
+      setError((deleteError as Error).message || 'Не удалось удалить материал');
+    }
+  };
+
+  const archiveMaterial = async () => {
+    if (!materialContextMenu) return;
+
+    try {
+      await learningService.archiveMaterial(materialContextMenu.material.id);
+      closeMaterialContextMenu();
+      await loadSummaryAndMaterials(false);
+    } catch (archiveError) {
+      setError((archiveError as Error).message || 'Не удалось перенести материал в архив');
+    }
+  };
+
+  const restoreMaterial = async () => {
+    if (!materialContextMenu) return;
+
+    try {
+      await learningService.restoreMaterial(materialContextMenu.material.id);
+      closeMaterialContextMenu();
+      await loadSummaryAndMaterials(false);
+    } catch (restoreError) {
+      setError((restoreError as Error).message || 'Не удалось вернуть материал из архива');
+    }
+  };
+
+  const renderSummary = () => {
+    const items = [
+      {
+        label: 'Назначено',
+        value: summary?.assignedCount ?? 0,
+        icon: <MenuBook color="primary" />,
+      },
+      {
+        label: 'Просмотрено',
+        value: summary?.viewedCount ?? 0,
+        icon: <PlayArrow color="success" />,
+      },
+      {
+        label: 'Просрочено',
+        value: summary?.expiredCount ?? 0,
+        icon: <Warning color="warning" />,
+      },
+      {
+        label: 'Доступно',
+        value: summary?.totalAvailable ?? 0,
+        icon: <Visibility color="info" />,
+      },
+    ];
+
+    return (
+      <Card sx={learningSidebarCardSx}>
+        <CardContent sx={{ p: 2.25, '&:last-child': { pb: 2.25 } }}>
+          <Typography variant="h6">Статистика</Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              columnGap: 2,
+              rowGap: 1.5,
+              mt: 1.75,
+            }}
+          >
+            {items.map((item) => (
+              <Stack
+                key={item.label}
+                sx={{
+                  minWidth: 0,
+                  pr: 0.5,
+                }}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                    {item.label}
+                  </Typography>
+                  <Box sx={{ lineHeight: 0, '& .MuiSvgIcon-root': { fontSize: 18 } }}>{item.icon}</Box>
+                </Stack>
+                <Typography variant="h4" sx={{ lineHeight: 1, mt: 0.5 }}>
+                  {item.value}
+                </Typography>
+              </Stack>
+            ))}
+          </Box>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const renderPageEditor = (page: LearningPageDraft, index: number) => (
     <Card key={page.localId} variant="outlined" sx={{ mb: 2 }}>
@@ -679,28 +781,16 @@ const LearningPage: React.FC = () => {
   );
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between" sx={{ mb: 2 }}>
-        <Box>
-          <Typography variant="h4">Обучение</Typography>
-          <Typography color="text.secondary">
-            Материалы с назначением на сотрудников и отделения, сроком действия и просмотром медиа/файлов.
-          </Typography>
-        </Box>
-
-        <Stack direction="row" spacing={1}>
-          <Button startIcon={<Refresh />} variant="outlined" onClick={() => void loadSummaryAndMaterials(true)}>
-            Обновить
-          </Button>
-          {canEditLearning && (
-            <Button startIcon={<Add />} variant="contained" onClick={handleCreateOpen}>
-              Новый материал
-            </Button>
-          )}
-        </Stack>
-      </Stack>
-
-      {renderSummary()}
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
+        overflow: 'hidden',
+      }}
+    >
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -708,32 +798,78 @@ const LearningPage: React.FC = () => {
         </Alert>
       )}
 
-      <Grid container spacing={2} sx={{ flexGrow: 1, minHeight: 0 }}>
-        <Grid size={{ xs: 12, md: 4, lg: 3 }} sx={{ minHeight: 0 }}>
-          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <CardContent sx={{ pb: 1 }}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Поиск материалов..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Search fontSize="small" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+      <Box
+        sx={{
+          flexGrow: 1,
+          minHeight: 0,
+          minWidth: 0,
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '292px minmax(0, 1fr)', lg: '308px minmax(0, 1fr)' },
+          gap: 1.25,
+          alignItems: 'stretch',
+        }}
+      >
+        <Stack spacing={2} sx={{ minHeight: 0, height: '100%' }}>
+          {renderSummary()}
+
+          <Card sx={{ ...learningSidebarCardSx, flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <CardContent sx={{ pb: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Stack spacing={1.5}>
+                <Stack direction="column" spacing={1}>
+                  <Button startIcon={<Refresh />} variant="outlined" onClick={() => void loadSummaryAndMaterials(true)} fullWidth>
+                    Обновить
+                  </Button>
+                  {canEditLearning && (
+                    <Button startIcon={<Add />} variant="contained" onClick={handleCreateOpen} fullWidth>
+                      Новый материал
+                    </Button>
+                  )}
+                </Stack>
+
+                {canEditLearning && (
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant={materialListMode === 'active' ? 'contained' : 'outlined'}
+                      onClick={() => setMaterialListMode('active')}
+                      fullWidth
+                    >
+                      Активные
+                    </Button>
+                    <Button
+                      size="small"
+                      variant={materialListMode === 'archive' ? 'contained' : 'outlined'}
+                      onClick={() => setMaterialListMode('archive')}
+                      fullWidth
+                    >
+                      Архив
+                    </Button>
+                  </Stack>
+                )}
+
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Поиск материалов..."
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Stack>
             </CardContent>
             <Divider />
             {loadingList ? (
-              <Box sx={{ p: 3, textAlign: 'center' }}>
+              <Box sx={{ p: 3, textAlign: 'center', flexGrow: 1, display: 'grid', placeItems: 'center' }}>
                 <CircularProgress />
               </Box>
             ) : (
-              <Box sx={{ overflowY: 'auto', flexGrow: 1 }}>
+              <Box sx={{ overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, minHeight: 0 }}>
                 {filteredMaterials.map((item) => (
                   <Button
                     key={item.id}
@@ -748,9 +884,20 @@ const LearningPage: React.FC = () => {
                       borderColor: selectedId === item.id ? 'primary.main' : 'transparent',
                     }}
                     onClick={() => setSelectedId(item.id)}
+                    onContextMenu={(event) => openMaterialContextMenu(event, item)}
                   >
-                    <Box sx={{ textAlign: 'left', width: '100%' }}>
-                      <Typography variant="body1" fontWeight={600} noWrap>
+                    <Box sx={{ textAlign: 'left', width: '100%', minWidth: 0 }}>
+                      <Typography
+                        variant="body1"
+                        fontWeight={600}
+                        sx={{
+                          display: '-webkit-box',
+                          overflow: 'hidden',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          wordBreak: 'break-word',
+                        }}
+                      >
                         {item.title}
                       </Typography>
                       <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} useFlexGap flexWrap="wrap">
@@ -764,99 +911,134 @@ const LearningPage: React.FC = () => {
 
                 {filteredMaterials.length === 0 && (
                   <Box sx={{ p: 2 }}>
-                    <Typography color="text.secondary">Материалы не найдены</Typography>
+                    <Typography color="text.secondary">{showArchivedMaterials ? 'Архив пуст' : 'Материалы не найдены'}</Typography>
                   </Box>
                 )}
               </Box>
             )}
           </Card>
-        </Grid>
+        </Stack>
 
-        <Grid size={{ xs: 12, md: 8, lg: 9 }} sx={{ minHeight: 0 }}>
-          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {loadingDetail ? (
-              <Box sx={{ p: 4, textAlign: 'center' }}>
-                <CircularProgress />
-              </Box>
-            ) : !selectedMaterial ? (
-              <Box sx={{ p: 4 }}>
-                <Typography color="text.secondary">Выберите материал из списка.</Typography>
-              </Box>
-            ) : (
-              <Box sx={{ p: 3, overflowY: 'auto', flexGrow: 1 }}>
-                <Stack spacing={2}>
-                  <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
-                    <Box>
-                      <Typography variant="h5">{selectedMaterial.title}</Typography>
-                      <Typography color="text.secondary">
-                        {selectedMaterial.description || 'Описание отсутствует'}
-                      </Typography>
-                      <Stack direction="row" spacing={1} sx={{ mt: 1 }} useFlexGap flexWrap="wrap">
-                        <Chip label={selectedMaterial.materialType === 'single_page' ? 'Одна страница' : 'Многостраничный'} size="small" />
-                        <Chip label={`Страниц: ${selectedMaterial.pages.length}`} size="small" />
-                        {selectedMaterial.expiresAt && (
-                          <Chip
-                            size="small"
-                            color={selectedMaterial.isExpired ? 'warning' : 'default'}
-                            label={`Действует до: ${format(new Date(selectedMaterial.expiresAt), 'd MMM yyyy, HH:mm', { locale: ru })}`}
-                          />
-                        )}
-                      </Stack>
-                    </Box>
-                  </Stack>
-
-                  {!selectedMaterial.canOpen && (
-                    <Alert severity="warning">
-                      Материал сейчас недоступен для просмотра (возможно, срок действия истек или материал не назначен).
-                    </Alert>
-                  )}
-
-                  {selectedMaterial.canOpen && selectedMaterial.pages.length > 0 && (
-                    <>
-                      <Tabs
-                        value={activePage?.id || false}
-                        onChange={(_event, value) => {
-                          setSelectedPageId(value);
-                          if (selectedMaterial.canOpen) {
-                            void learningService.markVisited(selectedMaterial.id, String(value));
-                          }
-                        }}
-                        variant="scrollable"
-                        scrollButtons="auto"
-                      >
-                        {selectedMaterial.pages.map((page) => (
-                          <Tab key={page.id} value={page.id} label={page.title} />
-                        ))}
-                      </Tabs>
-
-                      {activePage && (
-                        <Paper variant="outlined" sx={{ ...shellInnerPanelSx, p: 2 }}>
-                          <Stack spacing={2}>
-                            <Typography variant="h6">{activePage.title}</Typography>
-                            <Typography sx={{ whiteSpace: 'pre-wrap' }}>
-                              {activePage.content || 'Без текстового контента'}
-                            </Typography>
-
-                            {activePage.files.length > 0 && (
-                              <Grid container spacing={1}>
-                                {activePage.files.map((file) => (
-                                  <Grid key={file.id} size={{ xs: 12, md: 6 }}>
-                                    <LearningFilePreview file={file} />
-                                  </Grid>
-                                ))}
-                              </Grid>
-                            )}
-                          </Stack>
-                        </Paper>
+        <Card sx={{ ...learningMainCardSx, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {loadingDetail ? (
+            <Box sx={{ p: 4, textAlign: 'center', flexGrow: 1, display: 'grid', placeItems: 'center' }}>
+              <CircularProgress />
+            </Box>
+          ) : !selectedMaterial ? (
+            <Box sx={{ p: 4, flexGrow: 1 }}>
+              <Typography color="text.secondary">Выберите материал из списка.</Typography>
+            </Box>
+          ) : (
+            <Box sx={{ p: { xs: 2, md: 3 }, overflowY: 'auto', overflowX: 'hidden', flexGrow: 1, minHeight: 0, minWidth: 0 }}>
+              <Stack spacing={2} sx={{ minWidth: 0 }}>
+                <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={2}>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="h5" sx={{ overflowWrap: 'anywhere' }}>
+                      {selectedMaterial.title}
+                    </Typography>
+                    <Typography color="text.secondary">
+                      {selectedMaterial.description || 'Описание отсутствует'}
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ mt: 1 }} useFlexGap flexWrap="wrap">
+                      <Chip label={selectedMaterial.materialType === 'single_page' ? 'Одна страница' : 'Многостраничный'} size="small" />
+                      <Chip label={`Страниц: ${selectedMaterial.pages.length}`} size="small" />
+                      {selectedMaterial.expiresAt && (
+                        <Chip
+                          size="small"
+                          color={selectedMaterial.isExpired ? 'warning' : 'default'}
+                          label={`Действует до: ${format(new Date(selectedMaterial.expiresAt), 'd MMM yyyy, HH:mm', { locale: ru })}`}
+                        />
                       )}
-                    </>
-                  )}
+                    </Stack>
+                  </Box>
                 </Stack>
-              </Box>
-            )}
-          </Card>
-        </Grid>
-      </Grid>
+
+                {selectedMaterial.isArchived && (
+                  <Alert severity="info">
+                    Материал находится в архиве и скрыт из общего списка сотрудников.
+                  </Alert>
+                )}
+
+                {!selectedMaterial.canOpen && (
+                  <Alert severity="warning">
+                    Материал сейчас недоступен для просмотра (возможно, срок действия истек или материал не назначен).
+                  </Alert>
+                )}
+
+                {selectedMaterial.canOpen && selectedMaterial.pages.length > 0 && (
+                  <>
+                    <Tabs
+                      value={activePage?.id || false}
+                      onChange={(_event, value) => {
+                        setSelectedPageId(value);
+                        if (selectedMaterial.canOpen && !selectedMaterial.isArchived) {
+                          void learningService.markVisited(selectedMaterial.id, String(value));
+                        }
+                      }}
+                      variant="scrollable"
+                      scrollButtons="auto"
+                    >
+                      {selectedMaterial.pages.map((page) => (
+                        <Tab key={page.id} value={page.id} label={page.title} />
+                      ))}
+                    </Tabs>
+
+                    {activePage && (
+                      <Paper variant="outlined" sx={{ ...shellInnerPanelSx, p: { xs: 1.5, md: 2 }, minWidth: 0, overflow: 'hidden' }}>
+                        <Stack spacing={2} sx={{ minWidth: 0 }}>
+                          <Typography variant="h6" sx={{ overflowWrap: 'anywhere' }}>
+                            {activePage.title}
+                          </Typography>
+                          <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                            {activePage.content || 'Без текстового контента'}
+                          </Typography>
+
+                          {activePage.files.length > 0 && (
+                            <Grid container spacing={1}>
+                              {activePage.files.map((file) => (
+                                <Grid key={file.id} size={{ xs: 12, lg: 6 }}>
+                                  <LearningFilePreview file={file} />
+                                </Grid>
+                              ))}
+                            </Grid>
+                          )}
+                        </Stack>
+                      </Paper>
+                    )}
+                  </>
+                )}
+              </Stack>
+            </Box>
+          )}
+        </Card>
+      </Box>
+
+      <Menu
+        open={Boolean(materialContextMenu)}
+        onClose={closeMaterialContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          materialContextMenu
+            ? { top: materialContextMenu.mouseY, left: materialContextMenu.mouseX }
+            : undefined
+        }
+      >
+        {showArchivedMaterials ? (
+          <MenuItem onClick={() => void restoreMaterial()}>
+            <Unarchive fontSize="small" sx={{ mr: 1 }} />
+            Вернуть из архива
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={() => void archiveMaterial()}>
+            <Archive fontSize="small" sx={{ mr: 1 }} />
+            Перенести в архив
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => void deleteMaterial()} sx={{ color: 'error.main' }}>
+          <Delete fontSize="small" sx={{ mr: 1 }} />
+          Удалить
+        </MenuItem>
+      </Menu>
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>Новый обучающий материал</DialogTitle>

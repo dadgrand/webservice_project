@@ -154,8 +154,8 @@ export default function Layout({ children }: Props) {
     }
   };
 
-  const userFullName = user
-    ? [user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ')
+  const userDisplayName = user
+    ? [user.firstName, user.middleName, user.lastName].filter(Boolean).join(' ')
     : '';
   const userInitials = user
     ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || 'U'
@@ -328,7 +328,7 @@ export default function Layout({ children }: Props) {
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: { xs: 0, sm: 0.6 } }}>
             <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' }, fontWeight: 600 }}>
-              {userFullName}
+              {userDisplayName}
             </Typography>
             <IconButton
               onClick={handleMenuClick}
@@ -437,7 +437,7 @@ export default function Layout({ children }: Props) {
               left: 14,
               transform: `translate3d(${desktopSidebarOpen ? 8 : -2 + desktopRailIntensity * 10}px, -50%, 0) scale(${0.97 + desktopRailIntensity * 0.06})`,
               transformOrigin: 'left center',
-              opacity: 0.68 + desktopRailIntensity * 0.32,
+              opacity: 0.74 + desktopRailIntensity * 0.26,
               transition: 'transform 220ms ease, opacity 220ms ease',
               zIndex: theme.zIndex.drawer + 2,
               pointerEvents: 'auto',
@@ -459,8 +459,8 @@ export default function Layout({ children }: Props) {
                   width: 56,
                   borderRadius: '999px',
                   background:
-                    'linear-gradient(180deg, rgba(105, 135, 153, 0.16) 0%, rgba(152, 176, 190, 0.09) 40%, rgba(116, 144, 159, 0.14) 100%)',
-                  boxShadow: '0 18px 44px rgba(63, 93, 110, 0.12)',
+                    'linear-gradient(180deg, rgba(90, 120, 138, 0.24) 0%, rgba(136, 162, 177, 0.14) 40%, rgba(101, 131, 146, 0.2) 100%)',
+                  boxShadow: '0 18px 44px rgba(63, 93, 110, 0.16)',
                   filter: 'blur(10px)',
                   pointerEvents: 'none',
                 },
@@ -497,9 +497,9 @@ export default function Layout({ children }: Props) {
                         overflow: 'hidden',
                         color: isActive ? '#f6fbff' : '#e5eef4',
                         background: isHovered || isActive
-                          ? `linear-gradient(90deg, ${alpha('#6f9fbb', isActive ? 0.62 : 0.5)} 0%, ${alpha('#99b7c9', isActive ? 0.42 : 0.34)} 100%)`
-                          : `linear-gradient(180deg, ${alpha('#bcced9', 0.42 + desktopRailIntensity * 0.08)} 0%, ${alpha('#aebfca', 0.28 + desktopRailIntensity * 0.06)} 100%)`,
-                        border: `1px solid ${alpha('#eff6f9', isHovered || isActive ? 0.34 : 0.18)}`,
+                          ? `linear-gradient(90deg, ${alpha('#5f86a0', isActive ? 0.79 : 0.68)} 0%, ${alpha('#86a5b8', isActive ? 0.6 : 0.5)} 100%)`
+                          : `linear-gradient(180deg, ${alpha('#a4b8c4', 0.6 + desktopRailIntensity * 0.08)} 0%, ${alpha('#95aab7', 0.44 + desktopRailIntensity * 0.06)} 100%)`,
+                        border: `1px solid ${alpha('#eff6f9', isHovered || isActive ? 0.38 : 0.22)}`,
                         boxShadow: isHovered || isActive
                           ? `0 18px 34px ${alpha('#36586b', 0.24)}, 0 0 0 14px ${alpha('#cfe0ea', isHovered ? 0.14 : 0.08)}, inset 0 1px 0 ${alpha('#ffffff', 0.22)}`
                           : `0 12px 24px ${alpha('#465f6d', 0.16)}, inset 0 1px 0 ${alpha('#ffffff', 0.14)}`,

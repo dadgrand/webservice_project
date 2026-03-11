@@ -20,6 +20,13 @@ import { useAuthStore } from '../store/authStore';
 import type { ApiResponse, User } from '../types';
 import { shellPanelSx } from '../styles/shell';
 import { resolveMediaUrl } from '../utils/media';
+import {
+  formatRussianPhone,
+  isValidInternalPhone,
+  isValidRussianPhone,
+  normalizeInternalPhone,
+  RUSSIAN_PHONE_PLACEHOLDER,
+} from '../utils/phone';
 
 type ProfileFormState = {
   firstName: string;
@@ -39,8 +46,8 @@ function toFormState(user: User | null): ProfileFormState {
     middleName: user?.middleName ?? '',
     email: user?.email ?? '',
     position: user?.position ?? '',
-    phone: user?.phone ?? '',
-    phoneInternal: user?.phoneInternal ?? '',
+    phone: formatRussianPhone(user?.phone),
+    phoneInternal: normalizeInternalPhone(user?.phoneInternal),
     bio: user?.bio ?? '',
   };
 }
@@ -81,7 +88,11 @@ export default function SettingsPage() {
   }, [user]);
 
   const handleChange = (field: keyof ProfileFormState) => (event: ChangeEvent<HTMLInputElement>) => {
-    const nextValue = event.target.value;
+    const nextValue = field === 'phone'
+      ? formatRussianPhone(event.target.value)
+      : field === 'phoneInternal'
+        ? normalizeInternalPhone(event.target.value)
+        : event.target.value;
     setForm((prev) => ({ ...prev, [field]: nextValue }));
   };
 
@@ -94,6 +105,18 @@ export default function SettingsPage() {
 
     if (!firstName || !lastName || !email) {
       setSaveError('Имя, фамилия и email обязательны');
+      setSaveSuccess(null);
+      return;
+    }
+
+    if (form.phone && !isValidRussianPhone(form.phone)) {
+      setSaveError(`Телефон должен быть в формате ${RUSSIAN_PHONE_PLACEHOLDER}`);
+      setSaveSuccess(null);
+      return;
+    }
+
+    if (form.phoneInternal && !isValidInternalPhone(form.phoneInternal)) {
+      setSaveError('Внутренний номер должен содержать от 2 до 6 цифр');
       setSaveSuccess(null);
       return;
     }
@@ -231,7 +254,15 @@ export default function SettingsPage() {
                 </Grid>
 
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <TextField label="Телефон" fullWidth value={form.phone} onChange={handleChange('phone')} />
+                  <TextField
+                    label="Телефон"
+                    fullWidth
+                    value={form.phone}
+                    onChange={handleChange('phone')}
+                    placeholder={RUSSIAN_PHONE_PLACEHOLDER}
+                    inputMode="tel"
+                    helperText={form.phone ? 'Формат: +7-999-999-99-99' : ' '}
+                  />
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
@@ -239,6 +270,8 @@ export default function SettingsPage() {
                     fullWidth
                     value={form.phoneInternal}
                     onChange={handleChange('phoneInternal')}
+                    inputMode="numeric"
+                    helperText={form.phoneInternal ? 'Только цифры, 2-6 знаков' : ' '}
                   />
                 </Grid>
 

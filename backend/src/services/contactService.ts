@@ -1,4 +1,5 @@
 import prisma from '../config/database.js';
+import { normalizeInternalPhone, normalizeRussianPhone } from '../utils/phone.js';
 
 export interface DepartmentDto {
   id: string;
@@ -139,8 +140,8 @@ export async function updateProfile(
       lastName: normalizeRequiredString(data.lastName),
       middleName: normalizeOptionalString(data.middleName),
       position: normalizeOptionalString(data.position),
-      phone: normalizeOptionalString(data.phone),
-      phoneInternal: normalizeOptionalString(data.phoneInternal),
+      phone: normalizeRussianPhone(data.phone),
+      phoneInternal: normalizeInternalPhone(data.phoneInternal),
       email: data.email?.trim().toLowerCase(),
       bio: normalizeOptionalString(data.bio),
       avatarUrl: normalizeOptionalString(data.avatarUrl),

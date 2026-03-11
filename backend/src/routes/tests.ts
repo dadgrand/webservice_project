@@ -23,6 +23,9 @@ router.get('/files/:fileName/download', testController.downloadFile);
 
 router.get('/', testController.listTests);
 router.post('/', requirePermission('tests.edit'), validate(testController.createTestValidation), testController.createTest);
+router.post('/:id/archive', requirePermission('tests.edit'), validate(testController.testIdValidation), testController.archiveTest);
+router.post('/:id/restore', requirePermission('tests.edit'), validate(testController.testIdValidation), testController.restoreTest);
+router.delete('/:id', requirePermission('tests.edit'), validate(testController.testIdValidation), testController.deleteTest);
 
 router.get('/attempts/:attemptId', validate(testController.attemptIdValidation), testController.getAttemptById);
 router.post(

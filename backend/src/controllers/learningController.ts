@@ -45,7 +45,13 @@ export async function getAudienceOptions(_req: AuthRequest, res: Response) {
 export async function listMaterials(req: AuthRequest, res: Response) {
   try {
     const canEditMaterials = req.user!.permissions.includes('learning.edit');
-    const materials = await learningService.listMaterialsForUser(req.user!.id, req.user!.isAdmin, canEditMaterials);
+    const archived = req.query.archived === 'true';
+    const materials = await learningService.listMaterialsForUser({
+      userId: req.user!.id,
+      isAdmin: req.user!.isAdmin,
+      canEditMaterials,
+      archived,
+    });
     return sendSuccess(res, materials);
   } catch (error) {
     return sendError(res, getErrorMessage(error), 500);
@@ -69,6 +75,33 @@ export async function createMaterial(req: AuthRequest, res: Response) {
   try {
     const created = await learningService.createMaterial(req.user!.id, req.body);
     return sendSuccess(res, created, 'Обучающий материал создан', 201);
+  } catch (error) {
+    return sendError(res, getErrorMessage(error), 400);
+  }
+}
+
+export async function deleteMaterial(req: AuthRequest, res: Response) {
+  try {
+    await learningService.deleteMaterial(req.params.id);
+    return sendSuccess(res, null, 'Материал удален');
+  } catch (error) {
+    return sendError(res, getErrorMessage(error), 400);
+  }
+}
+
+export async function archiveMaterial(req: AuthRequest, res: Response) {
+  try {
+    await learningService.archiveMaterial(req.params.id);
+    return sendSuccess(res, null, 'Материал перенесен в архив');
+  } catch (error) {
+    return sendError(res, getErrorMessage(error), 400);
+  }
+}
+
+export async function restoreMaterial(req: AuthRequest, res: Response) {
+  try {
+    await learningService.restoreMaterial(req.params.id);
+    return sendSuccess(res, null, 'Материал возвращен из архива');
   } catch (error) {
     return sendError(res, getErrorMessage(error), 400);
   }

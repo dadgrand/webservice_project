@@ -15,7 +15,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { Folder as FolderIcon, Label as LabelIcon, MoveToInbox as InboxIcon } from '@mui/icons-material';
+import { ArchiveOutlined, Folder as FolderIcon, Label as LabelIcon, MoveToInbox as InboxIcon } from '@mui/icons-material';
 import { messageService } from '../../../services';
 import { useMessageStore } from '../../../store/messageStore';
 import type { Message } from '../../../types';
@@ -94,6 +94,13 @@ const MessageOrganizationDialog: React.FC<MessageOrganizationDialogProps> = ({
 
   const availableFolders = [
     { id: null, name: 'Входящие', color: null },
+    ...folders
+      .filter((folder) => folder.type === 'system' && folder.systemName === 'archive')
+      .map((folder) => ({
+        id: folder.id,
+        name: folder.name,
+        color: folder.color,
+      })),
     ...folders.filter((folder) => folder.type === 'custom').map((folder) => ({
       id: folder.id,
       name: folder.name,
@@ -223,6 +230,8 @@ const MessageOrganizationDialog: React.FC<MessageOrganizationDialogProps> = ({
                           <ListItemIcon sx={{ minWidth: 40 }}>
                             {folder.id === null ? (
                               <InboxIcon />
+                            ) : folder.name === 'Архив' ? (
+                              <ArchiveOutlined />
                             ) : (
                               <FolderIcon sx={{ color: folder.color || 'inherit' }} />
                             )}

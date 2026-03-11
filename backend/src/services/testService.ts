@@ -60,6 +60,16 @@ export interface SubmitAttemptInput {
   timeSpent?: number;
 }
 
+interface TestAccessContext {
+  userId: string;
+  isAdmin: boolean;
+  canEditTests: boolean;
+}
+
+interface ListTestsOptions extends TestAccessContext {
+  archived?: boolean;
+}
+
 export interface ManualReviewItem {
   questionId: string;
   isCorrect: boolean;
@@ -185,6 +195,10 @@ function hasAssignment(test: { assignToAll: boolean; assignedUserIds: unknown; a
   if (!departmentId) return false;
   const departmentIds = toStringArray(test.assignedDepartmentIds);
   return departmentIds.includes(departmentId);
+}
+
+function canManageTests(context: Pick<TestAccessContext, 'isAdmin' | 'canEditTests'>): boolean {
+  return context.isAdmin || context.canEditTests;
 }
 
 function serializeQuestionInput(question: TestQuestionInput, order: number) {
@@ -391,7 +405,7 @@ export async function createTest(authorId: string, payload: CreateTestInput) {
   };
 }
 
-export async function listTestsForUser(userId: string, isAdmin: boolean) {
+export async function listTestsForUser({ userId, isAdmin, canEditTests, archived = false }: ListTestsOptions) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, departmentId: true },
@@ -402,6 +416,7 @@ export async function listTestsForUser(userId: string, isAdmin: boolean) {
   }
 
   const tests = await prisma.test.findMany({
+    where: archived ? { archivedAt: { not: null } } : { archivedAt: null },
     include: {
       author: {
         select: {
@@ -422,12 +437,14 @@ export async function listTestsForUser(userId: string, isAdmin: boolean) {
         take: 1,
       },
     },
-    orderBy: [{ isPublished: 'desc' }, { updatedAt: 'desc' }],
+    orderBy: archived ? [{ archivedAt: 'desc' }, { updatedAt: 'desc' }] : [{ isPublished: 'desc' }, { updatedAt: 'desc' }],
   });
 
+  const canManage = canManageTests({ isAdmin, canEditTests });
   const visibleTests = tests.filter((test) => {
-    if (isAdmin) return true;
+    if (canManage) return true;
     if (test.authorId === userId) return true;
+    if (archived) return false;
     if (!test.isPublished) return false;
     return hasAssignment(test, userId, user.departmentId);
   });
@@ -445,6 +462,8 @@ export async function listTestsForUser(userId: string, isAdmin: boolean) {
       showCorrectAnswers: test.showCorrectAnswers,
       timeLimit: test.timeLimit,
       maxAttempts: test.maxAttempts,
+      archivedAt: test.archivedAt,
+      isArchived: test.archivedAt !== null,
       questionCount: test.questions.length,
       assignToAll: test.assignToAll,
       assignedUserIds: toStringArray(test.assignedUserIds),
@@ -458,14 +477,14 @@ export async function listTestsForUser(userId: string, isAdmin: boolean) {
             completedAt: latestAttempt.completedAt,
           }
         : null,
-      canTake: test.isPublished && hasAssignment(test, userId, user.departmentId),
-      canEdit: isAdmin || test.authorId === userId,
+      canTake: test.archivedAt === null && test.isPublished && hasAssignment(test, userId, user.departmentId),
+      canEdit: canManage || test.authorId === userId,
     };
   });
 }
 
-export async function getUserSummary(userId: string, isAdmin: boolean) {
-  const tests = await listTestsForUser(userId, isAdmin);
+export async function getUserSummary(userId: string, isAdmin: boolean, canEditTests: boolean) {
+  const tests = await listTestsForUser({ userId, isAdmin, canEditTests, archived: false });
   const accessible = tests.filter((test) => test.canTake || test.canEdit);
 
   const latestAttempts = accessible
@@ -489,7 +508,7 @@ export async function getUserSummary(userId: string, isAdmin: boolean) {
   };
 }
 
-export async function getTestById(testId: string, userId: string, isAdmin: boolean) {
+export async function getTestById(testId: string, userId: string, isAdmin: boolean, canEditTests: boolean) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { departmentId: true },
@@ -525,8 +544,13 @@ export async function getTestById(testId: string, userId: string, isAdmin: boole
     return null;
   }
 
-  const canEdit = isAdmin || test.authorId === userId;
-  const canTake = test.isPublished && hasAssignment(test, userId, user.departmentId);
+  const canManage = canManageTests({ isAdmin, canEditTests });
+  const canEdit = canManage || test.authorId === userId;
+  const canTake = test.archivedAt === null && test.isPublished && hasAssignment(test, userId, user.departmentId);
+
+  if (test.archivedAt !== null && !canManage) {
+    return null;
+  }
 
   if (!canEdit && !canTake) {
     return null;
@@ -608,6 +632,8 @@ export async function getTestById(testId: string, userId: string, isAdmin: boole
     showCorrectAnswers: test.showCorrectAnswers,
     maxAttempts: test.maxAttempts,
     isPublished: test.isPublished,
+    archivedAt: test.archivedAt,
+    isArchived: test.archivedAt !== null,
     createdAt: test.createdAt,
     updatedAt: test.updatedAt,
     questions: serializedQuestions,
@@ -735,7 +761,7 @@ function sanitizeAttemptAnswers(answers: StoredAttemptAnswer[], canShowCorrectAn
   });
 }
 
-export async function submitAttempt(testId: string, userId: string, isAdmin: boolean, payload: SubmitAttemptInput) {
+export async function submitAttempt(testId: string, userId: string, isAdmin: boolean, canEditTests: boolean, payload: SubmitAttemptInput) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { departmentId: true },
@@ -758,8 +784,8 @@ export async function submitAttempt(testId: string, userId: string, isAdmin: boo
     throw new Error('Тест не найден');
   }
 
-  const canTake = isAdmin || hasAssignment(test, userId, user.departmentId);
-  if (!test.isPublished || !canTake) {
+  const canTake = canManageTests({ isAdmin, canEditTests }) || hasAssignment(test, userId, user.departmentId);
+  if (test.archivedAt !== null || !test.isPublished || !canTake) {
     throw new Error('Тест недоступен для прохождения');
   }
 
@@ -805,8 +831,9 @@ export async function submitAttempt(testId: string, userId: string, isAdmin: boo
     },
   });
 
-  const canShowResults = test.showResults || isAdmin || test.authorId === userId;
-  const canShowCorrectAnswers = (test.showCorrectAnswers && canShowResults) || isAdmin || test.authorId === userId;
+  const canManage = canManageTests({ isAdmin, canEditTests });
+  const canShowResults = test.showResults || canManage || test.authorId === userId;
+  const canShowCorrectAnswers = (test.showCorrectAnswers && canShowResults) || canManage || test.authorId === userId;
 
   return {
     attempt: {
@@ -818,7 +845,7 @@ export async function submitAttempt(testId: string, userId: string, isAdmin: boo
   };
 }
 
-export async function getAttemptById(attemptId: string, userId: string, isAdmin: boolean) {
+export async function getAttemptById(attemptId: string, userId: string, isAdmin: boolean, canEditTests: boolean) {
   const attempt = await prisma.testAttempt.findUnique({
     where: { id: attemptId },
     include: {
@@ -853,7 +880,7 @@ export async function getAttemptById(attemptId: string, userId: string, isAdmin:
 
   if (!attempt) return null;
 
-  const canEdit = isAdmin || attempt.test.authorId === userId;
+  const canEdit = canManageTests({ isAdmin, canEditTests }) || attempt.test.authorId === userId;
   const canView = canEdit || attempt.userId === userId;
   if (!canView) {
     return null;
@@ -875,7 +902,7 @@ export async function getAttemptById(attemptId: string, userId: string, isAdmin:
   };
 }
 
-export async function reviewAttempt(attemptId: string, reviewerId: string, isAdmin: boolean, payload: ManualReviewInput) {
+export async function reviewAttempt(attemptId: string, reviewerId: string, isAdmin: boolean, canEditTests: boolean, payload: ManualReviewInput) {
   const attempt = await prisma.testAttempt.findUnique({
     where: { id: attemptId },
     include: {
@@ -891,7 +918,7 @@ export async function reviewAttempt(attemptId: string, reviewerId: string, isAdm
     throw new Error('Попытка не найдена');
   }
 
-  const canEdit = isAdmin || attempt.test.authorId === reviewerId;
+  const canEdit = canManageTests({ isAdmin, canEditTests }) || attempt.test.authorId === reviewerId;
   if (!canEdit) {
     throw new Error('Недостаточно прав для ручной проверки');
   }
@@ -965,7 +992,7 @@ export async function reviewAttempt(attemptId: string, reviewerId: string, isAdm
   };
 }
 
-export async function getAccessibleFile(storedFileName: string, userId: string, isAdmin: boolean) {
+export async function getAccessibleFile(storedFileName: string, userId: string, isAdmin: boolean, canEditTests: boolean) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { departmentId: true },
@@ -983,6 +1010,7 @@ export async function getAccessibleFile(storedFileName: string, userId: string, 
       assignedUserIds: true,
       assignedDepartmentIds: true,
       isPublished: true,
+      archivedAt: true,
       questions: {
         select: {
           media: true,
@@ -998,8 +1026,8 @@ export async function getAccessibleFile(storedFileName: string, userId: string, 
       continue;
     }
 
-    const canEdit = isAdmin || test.authorId === userId;
-    const canTake = test.isPublished && hasAssignment(test, userId, user.departmentId);
+    const canEdit = canManageTests({ isAdmin, canEditTests }) || test.authorId === userId;
+    const canTake = test.archivedAt === null && test.isPublished && hasAssignment(test, userId, user.departmentId);
 
     if (!canEdit && !canTake) {
       return null;
@@ -1009,4 +1037,59 @@ export async function getAccessibleFile(storedFileName: string, userId: string, 
   }
 
   return null;
+}
+
+export async function archiveTest(testId: string): Promise<void> {
+  const test = await prisma.test.findUnique({
+    where: { id: testId },
+    select: { id: true, archivedAt: true },
+  });
+
+  if (!test) {
+    throw new Error('Тест не найден');
+  }
+
+  if (test.archivedAt) {
+    return;
+  }
+
+  await prisma.test.update({
+    where: { id: testId },
+    data: { archivedAt: new Date() },
+  });
+}
+
+export async function restoreTest(testId: string): Promise<void> {
+  const test = await prisma.test.findUnique({
+    where: { id: testId },
+    select: { id: true, archivedAt: true },
+  });
+
+  if (!test) {
+    throw new Error('Тест не найден');
+  }
+
+  if (!test.archivedAt) {
+    return;
+  }
+
+  await prisma.test.update({
+    where: { id: testId },
+    data: { archivedAt: null },
+  });
+}
+
+export async function deleteTest(testId: string): Promise<void> {
+  const test = await prisma.test.findUnique({
+    where: { id: testId },
+    select: { id: true },
+  });
+
+  if (!test) {
+    throw new Error('Тест не найден');
+  }
+
+  await prisma.test.delete({
+    where: { id: testId },
+  });
 }

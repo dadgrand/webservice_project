@@ -42,13 +42,13 @@ const SYSTEM_ICONS: Record<string, React.ReactElement> = {
 };
 
 // Map system folder names to folder types
-const FOLDER_TYPE_MAP: Record<string, 'inbox' | 'sent' | 'drafts' | 'starred' | 'trash' | 'custom'> = {
+const FOLDER_TYPE_MAP: Record<string, 'inbox' | 'sent' | 'drafts' | 'starred' | 'trash' | 'archive' | 'custom'> = {
   inbox: 'inbox',
   sent: 'sent',
   drafts: 'drafts',
   starred: 'starred',
   trash: 'trash',
-  archive: 'inbox',
+  archive: 'archive',
 };
 
 const FolderList: React.FC = () => {

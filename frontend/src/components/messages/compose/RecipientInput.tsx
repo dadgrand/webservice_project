@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Autocomplete, Avatar, Box, Chip, CircularProgress, TextField, Typography } from '@mui/material';
+import { createFilterOptions } from '@mui/material/Autocomplete';
 import { contactService } from '../../../services';
 import type { Contact } from '../../../types';
 import { resolveMediaUrl } from '../../../utils/media';
@@ -20,7 +21,17 @@ const RecipientInput: React.FC<RecipientInputProps> = ({
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<Contact[]>([]);
   const [selectedContacts, setSelectedContacts] = useState<Contact[]>([]);
+  const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const optionFilter = useMemo(
+    () =>
+      createFilterOptions<Contact>({
+        stringify: (option) =>
+          `${option.lastName} ${option.firstName} ${option.middleName || ''} ${option.email} ${option.position || ''}`,
+      }),
+    []
+  );
 
   useEffect(() => {
     if (value.length === 0) {
@@ -46,7 +57,31 @@ const RecipientInput: React.FC<RecipientInputProps> = ({
     };
   }, [value]);
 
+  const commitExactMatch = (): boolean => {
+    const normalizedInput = inputValue.trim().toLowerCase();
+    if (!normalizedInput) {
+      return false;
+    }
+
+    const exactMatch = options.find((option) => {
+      const name = `${option.lastName} ${option.firstName} ${option.middleName || ''}`.trim().toLowerCase();
+      return option.email.toLowerCase() === normalizedInput || name === normalizedInput;
+    });
+
+    if (!exactMatch || selectedContacts.some((contact) => contact.id === exactMatch.id)) {
+      return false;
+    }
+
+    const nextValue = [...selectedContacts, exactMatch];
+    setSelectedContacts(nextValue);
+    onChange(nextValue.map((contact) => contact.id));
+    setInputValue('');
+    return true;
+  };
+
   const handleInputChange = async (_event: React.SyntheticEvent, inputValue: string) => {
+    setInputValue(inputValue);
+
     if (inputValue.length < 2) {
       setOptions(selectedContacts);
       return;
@@ -72,16 +107,23 @@ const RecipientInput: React.FC<RecipientInputProps> = ({
       multiple
       open={open}
       value={selectedContacts}
+      inputValue={inputValue}
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
       isOptionEqualToValue={(option, selected) => option.id === selected.id}
       getOptionLabel={(option) => `${option.lastName} ${option.firstName}`}
+      filterOptions={optionFilter}
       options={options}
       loading={loading}
+      autoHighlight
+      clearOnBlur={false}
+      filterSelectedOptions
+      selectOnFocus
       onInputChange={handleInputChange}
       onChange={(_event, newValue) => {
         setSelectedContacts(newValue);
         onChange(newValue.map((user) => user.id));
+        setInputValue('');
       }}
       renderOption={(props, option) => (
         <li {...props}>
@@ -116,6 +158,11 @@ const RecipientInput: React.FC<RecipientInputProps> = ({
           {...params}
           label={label}
           placeholder={placeholder}
+          onKeyDown={(event) => {
+            if ((event.key === 'Enter' || event.key === 'Tab') && commitExactMatch()) {
+              event.preventDefault();
+            }
+          }}
           InputProps={{
             ...params.InputProps,
             endAdornment: (

@@ -44,7 +44,8 @@ export const reviewAttemptValidation = [
 
 export async function getSummary(req: AuthRequest, res: Response) {
   try {
-    const summary = await testService.getUserSummary(req.user!.id, req.user!.isAdmin);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const summary = await testService.getUserSummary(req.user!.id, req.user!.isAdmin, canEditTests);
     return sendSuccess(res, summary);
   } catch (error) {
     return sendError(res, getErrorMessage(error), 500);
@@ -62,7 +63,14 @@ export async function getAudienceOptions(_req: AuthRequest, res: Response) {
 
 export async function listTests(req: AuthRequest, res: Response) {
   try {
-    const tests = await testService.listTestsForUser(req.user!.id, req.user!.isAdmin);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const archived = req.query.archived === 'true';
+    const tests = await testService.listTestsForUser({
+      userId: req.user!.id,
+      isAdmin: req.user!.isAdmin,
+      canEditTests,
+      archived,
+    });
     return sendSuccess(res, tests);
   } catch (error) {
     return sendError(res, getErrorMessage(error), 500);
@@ -71,7 +79,8 @@ export async function listTests(req: AuthRequest, res: Response) {
 
 export async function getTestById(req: AuthRequest, res: Response) {
   try {
-    const test = await testService.getTestById(req.params.id, req.user!.id, req.user!.isAdmin);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const test = await testService.getTestById(req.params.id, req.user!.id, req.user!.isAdmin, canEditTests);
     if (!test) {
       return sendError(res, 'Тест не найден или недоступен', 404);
     }
@@ -93,7 +102,8 @@ export async function createTest(req: AuthRequest, res: Response) {
 
 export async function submitAttempt(req: AuthRequest, res: Response) {
   try {
-    const result = await testService.submitAttempt(req.params.id, req.user!.id, req.user!.isAdmin, req.body);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const result = await testService.submitAttempt(req.params.id, req.user!.id, req.user!.isAdmin, canEditTests, req.body);
     return sendSuccess(res, result, 'Тест завершен');
   } catch (error) {
     return sendError(res, getErrorMessage(error), 400);
@@ -102,7 +112,8 @@ export async function submitAttempt(req: AuthRequest, res: Response) {
 
 export async function getAttemptById(req: AuthRequest, res: Response) {
   try {
-    const attempt = await testService.getAttemptById(req.params.attemptId, req.user!.id, req.user!.isAdmin);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const attempt = await testService.getAttemptById(req.params.attemptId, req.user!.id, req.user!.isAdmin, canEditTests);
     if (!attempt) {
       return sendError(res, 'Попытка не найдена или недоступна', 404);
     }
@@ -115,7 +126,8 @@ export async function getAttemptById(req: AuthRequest, res: Response) {
 
 export async function reviewAttempt(req: AuthRequest, res: Response) {
   try {
-    const reviewed = await testService.reviewAttempt(req.params.attemptId, req.user!.id, req.user!.isAdmin, req.body);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const reviewed = await testService.reviewAttempt(req.params.attemptId, req.user!.id, req.user!.isAdmin, canEditTests, req.body);
     return sendSuccess(res, reviewed, 'Ручная проверка сохранена');
   } catch (error) {
     return sendError(res, getErrorMessage(error), 400);
@@ -164,7 +176,8 @@ function decodeOriginalFileName(originalName: string): string {
 
 export async function viewFile(req: AuthRequest, res: Response) {
   try {
-    const file = await testService.getAccessibleFile(req.params.fileName, req.user!.id, req.user!.isAdmin);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const file = await testService.getAccessibleFile(req.params.fileName, req.user!.id, req.user!.isAdmin, canEditTests);
 
     if (!file) {
       return sendError(res, 'Файл не найден', 404);
@@ -185,7 +198,8 @@ export async function viewFile(req: AuthRequest, res: Response) {
 
 export async function downloadFile(req: AuthRequest, res: Response) {
   try {
-    const file = await testService.getAccessibleFile(req.params.fileName, req.user!.id, req.user!.isAdmin);
+    const canEditTests = req.user!.permissions.includes('tests.edit');
+    const file = await testService.getAccessibleFile(req.params.fileName, req.user!.id, req.user!.isAdmin, canEditTests);
 
     if (!file) {
       return sendError(res, 'Файл не найден', 404);
@@ -200,5 +214,32 @@ export async function downloadFile(req: AuthRequest, res: Response) {
     return res.download(filePath, file.fileName);
   } catch (error) {
     return sendError(res, getErrorMessage(error), 500);
+  }
+}
+
+export async function archiveTest(req: AuthRequest, res: Response) {
+  try {
+    await testService.archiveTest(req.params.id);
+    return sendSuccess(res, null, 'Тест перенесен в архив');
+  } catch (error) {
+    return sendError(res, getErrorMessage(error), 400);
+  }
+}
+
+export async function restoreTest(req: AuthRequest, res: Response) {
+  try {
+    await testService.restoreTest(req.params.id);
+    return sendSuccess(res, null, 'Тест возвращен из архива');
+  } catch (error) {
+    return sendError(res, getErrorMessage(error), 400);
+  }
+}
+
+export async function deleteTest(req: AuthRequest, res: Response) {
+  try {
+    await testService.deleteTest(req.params.id);
+    return sendSuccess(res, null, 'Тест удален');
+  } catch (error) {
+    return sendError(res, getErrorMessage(error), 400);
   }
 }

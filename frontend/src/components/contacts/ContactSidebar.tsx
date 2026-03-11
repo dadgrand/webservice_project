@@ -15,9 +15,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { Search } from '@mui/icons-material';
+import { KeyboardArrowDown, KeyboardArrowUp, Search, Star } from '@mui/icons-material';
 import { contactService } from '../../services';
 import type { Contact, Department } from '../../types';
 import { shellInsetSurfaceSx, shellPanelHeaderSx, shellPanelSx } from '../../styles/shell';
@@ -29,22 +31,42 @@ interface ContactSidebarProps {
   selectedId: string | null;
   onSelect: (contact: Contact) => void;
   favoriteIds: string[];
+  onMoveFavorite: (contactId: string, offset: -1 | 1) => void;
 }
 
-const ContactSidebar: React.FC<ContactSidebarProps> = ({ selectedId, onSelect, favoriteIds }) => {
+const ContactSidebar: React.FC<ContactSidebarProps> = ({
+  selectedId,
+  onSelect,
+  favoriteIds,
+  onMoveFavorite,
+}) => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
   const trimmedSearch = search.trim();
+  const favoriteOrderMap = new Map(favoriteIds.map((id, index) => [id, index]));
   const visibleContacts =
     trimmedSearch.length > 0
       ? contacts
       : [...contacts].sort((left, right) => {
-          const leftRank = favoriteIds.includes(left.id) ? 0 : 1;
-          const rightRank = favoriteIds.includes(right.id) ? 0 : 1;
-          return leftRank - rightRank;
+          const leftIndex = favoriteOrderMap.get(left.id);
+          const rightIndex = favoriteOrderMap.get(right.id);
+
+          if (leftIndex !== undefined && rightIndex !== undefined) {
+            return leftIndex - rightIndex;
+          }
+
+          if (leftIndex !== undefined) {
+            return -1;
+          }
+
+          if (rightIndex !== undefined) {
+            return 1;
+          }
+
+          return `${left.lastName} ${left.firstName}`.localeCompare(`${right.lastName} ${right.firstName}`, 'ru');
         });
 
   // Load departments on mount
@@ -226,6 +248,38 @@ const ContactSidebar: React.FC<ContactSidebarProps> = ({ selectedId, onSelect, f
                       fontSize: '0.75rem',
                     }}
                   />
+                  {favoriteOrderMap.has(contact.id) && (
+                    <Box
+                      sx={{ display: 'flex', alignItems: 'center', gap: 0.1, ml: 1, color: 'warning.dark' }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Tooltip title="Избранный контакт">
+                        <Star fontSize="small" />
+                      </Tooltip>
+                      <Tooltip title="Поднять выше">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => onMoveFavorite(contact.id, -1)}
+                            disabled={favoriteOrderMap.get(contact.id) === 0}
+                          >
+                            <KeyboardArrowUp fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Опустить ниже">
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => onMoveFavorite(contact.id, 1)}
+                            disabled={favoriteOrderMap.get(contact.id) === favoriteIds.length - 1}
+                          >
+                            <KeyboardArrowDown fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Box>
+                  )}
                 </ListItemButton>
               </ListItem>
             ))}

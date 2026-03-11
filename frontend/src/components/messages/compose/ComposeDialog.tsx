@@ -169,7 +169,7 @@ const ComposeDialog: React.FC = () => {
   const handleDelete = async () => {
     // In draft mode "Удалить" should remove the draft from backend.
     if (editingDraft) {
-      const shouldDelete = window.confirm('Удалить черновик?');
+      const shouldDelete = window.confirm('Удалить черновик навсегда? Он не попадет в корзину.');
       if (!shouldDelete) return;
 
       setSending(true);
@@ -209,8 +209,8 @@ const ComposeDialog: React.FC = () => {
       </DialogTitle>
       <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '60vh' }}>
         {/* To field with CC/BCC toggle */}
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-          <Box sx={{ flexGrow: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+          <Box sx={{ flexGrow: 1, minWidth: 0, width: '100%' }}>
             <RecipientInput
               value={recipientIds}
               onChange={setRecipientIds}
@@ -221,7 +221,7 @@ const ComposeDialog: React.FC = () => {
             size="small" 
             onClick={() => setShowCcBcc(!showCcBcc)}
             endIcon={showCcBcc ? <ExpandLess /> : <ExpandMore />}
-            sx={{ mt: 1, minWidth: 'auto', whiteSpace: 'nowrap' }}
+            sx={{ mt: { xs: 0, sm: 1 }, ml: 'auto', minWidth: 'auto', whiteSpace: 'nowrap' }}
           >
             Копия
           </Button>
@@ -276,7 +276,7 @@ const ComposeDialog: React.FC = () => {
             Отмена
         </Button>
          <Button onClick={handleDelete} color="inherit" startIcon={<Delete />} disabled={sending}>
-            Удалить
+            {editingDraft ? 'Удалить навсегда' : 'Удалить'}
         </Button>
         <Box sx={{ flexGrow: 1 }} />
         <Button onClick={handleSaveDraft} disabled={sending}>

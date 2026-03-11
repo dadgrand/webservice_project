@@ -1,5 +1,6 @@
 import prisma from '../config/database.js';
 import { hashPassword, comparePassword, generateToken } from '../utils/auth.js';
+import { normalizeRussianPhone } from '../utils/phone.js';
 import {
   UserPayload,
   UserDto,
@@ -130,7 +131,7 @@ export async function createUser(
       middleName: data.middleName,
       position: data.position,
       departmentId: normalizedDepartmentId,
-      phone: data.phone,
+      phone: normalizeRussianPhone(data.phone),
       isAdmin: data.isAdmin || false,
     },
   });
@@ -244,7 +245,7 @@ export async function updateUser(
       middleName: data.middleName,
       position: data.position,
       departmentId: normalizedDepartmentId,
-      phone: data.phone,
+      phone: normalizeRussianPhone(data.phone),
       isActive: data.isActive,
       isAdmin: data.isAdmin,
     },

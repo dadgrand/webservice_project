@@ -23,6 +23,9 @@ router.get('/files/:fileName/download', learningController.downloadFile);
 
 router.get('/', learningController.listMaterials);
 router.post('/', requirePermission('learning.edit'), validate(learningController.createMaterialValidation), learningController.createMaterial);
+router.post('/:id/archive', requirePermission('learning.edit'), validate(learningController.materialIdValidation), learningController.archiveMaterial);
+router.post('/:id/restore', requirePermission('learning.edit'), validate(learningController.materialIdValidation), learningController.restoreMaterial);
+router.delete('/:id', requirePermission('learning.edit'), validate(learningController.materialIdValidation), learningController.deleteMaterial);
 
 router.get('/:id', validate(learningController.materialIdValidation), learningController.getMaterialById);
 router.post('/:id/visit', validate(learningController.materialIdValidation), learningController.markVisited);

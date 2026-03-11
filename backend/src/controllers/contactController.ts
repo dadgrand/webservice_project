@@ -4,6 +4,7 @@ import * as contactService from '../services/contactService.js';
 import * as userService from '../services/userService.js';
 import { sendSuccess, sendError, sendPaginated, getPaginationParams } from '../utils/response.js';
 import { AuthRequest } from '../types/index.js';
+import { isValidInternalPhone, isValidRussianPhone } from '../utils/phone.js';
 
 // Валидаторы
 export const createDepartmentValidation = [
@@ -18,6 +19,8 @@ export const updateProfileValidation = [
   body('email').optional().isEmail().withMessage('Введите корректный email'),
   body('firstName').optional().trim().notEmpty().withMessage('Имя обязательно'),
   body('lastName').optional().trim().notEmpty().withMessage('Фамилия обязательна'),
+  body('phone').optional({ nullable: true }).custom((value) => isValidRussianPhone(value)).withMessage('Телефон должен быть в формате +7-999-999-99-99'),
+  body('phoneInternal').optional({ nullable: true }).custom((value) => isValidInternalPhone(value)).withMessage('Внутренний номер должен содержать от 2 до 6 цифр'),
 ];
 
 // Контроллеры

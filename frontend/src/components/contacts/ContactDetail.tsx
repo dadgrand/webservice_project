@@ -33,6 +33,11 @@ import type { Contact } from '../../types';
 import { shellEmptyStateSx, shellInnerPanelSx, shellInsetSurfaceSx, shellPanelHeaderSx } from '../../styles/shell';
 import type { ApiResponse } from '../../types';
 import { resolveMediaUrl } from '../../utils/media';
+import {
+  formatRussianPhone,
+  isValidRussianPhone,
+  RUSSIAN_PHONE_PLACEHOLDER,
+} from '../../utils/phone';
 
 interface ContactDetailProps {
   contact: Contact | null;
@@ -51,6 +56,7 @@ const ContactDetail: React.FC<ContactDetailProps> = ({ contact, isFavorite, onFa
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editPhone, setEditPhone] = useState('');
   const [editBio, setEditBio] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   
   // Check if viewing own profile
@@ -116,13 +122,20 @@ const ContactDetail: React.FC<ContactDetailProps> = ({ contact, isFavorite, onFa
   
   const handleOpenEditDialog = () => {
     if (!profileContact) return;
-    setEditPhone(profileContact.phone || '');
+    setEditPhone(formatRussianPhone(profileContact.phone));
     setEditBio(profileContact.bio || '');
+    setEditError(null);
     setEditDialogOpen(true);
   };
   
   const handleSaveProfile = async () => {
+    if (editPhone && !isValidRussianPhone(editPhone)) {
+      setEditError(`Телефон должен быть в формате ${RUSSIAN_PHONE_PLACEHOLDER}`);
+      return;
+    }
+
     setSaving(true);
+    setEditError(null);
     try {
       const updatedUser = await contactService.updateProfile({
         phone: editPhone || undefined,
@@ -135,7 +148,7 @@ const ContactDetail: React.FC<ContactDetailProps> = ({ contact, isFavorite, onFa
       setEditDialogOpen(false);
     } catch (error) {
       console.error('Failed to update profile:', error);
-      alert('Ошибка сохранения профиля');
+      setEditError('Ошибка сохранения профиля');
     } finally {
       setSaving(false);
     }
@@ -309,7 +322,7 @@ const ContactDetail: React.FC<ContactDetailProps> = ({ contact, isFavorite, onFa
                 <Typography variant="caption" color="text.secondary">
                   Телефон
                 </Typography>
-                <Typography variant="body2">{profileContact.phone}</Typography>
+                <Typography variant="body2">{formatRussianPhone(profileContact.phone)}</Typography>
               </Box>
             </Box>
           )}
@@ -420,12 +433,15 @@ const ContactDetail: React.FC<ContactDetailProps> = ({ contact, isFavorite, onFa
         </DialogTitle>
         <DialogContent dividers>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
+            {editError && <Alert severity="error">{editError}</Alert>}
             <TextField
               label="Телефон"
               fullWidth
               value={editPhone}
-              onChange={(e) => setEditPhone(e.target.value)}
-              placeholder="+7 (XXX) XXX-XX-XX"
+              onChange={(e) => setEditPhone(formatRussianPhone(e.target.value))}
+              placeholder={RUSSIAN_PHONE_PLACEHOLDER}
+              inputMode="tel"
+              helperText="Формат: +7-999-999-99-99"
             />
             <TextField
               label="О себе"

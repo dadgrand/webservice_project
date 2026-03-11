@@ -4,8 +4,9 @@ import { SOCKET_URL } from '../services/api';
 import { messageService } from '../services';
 import type { InboxMessage, Message, MessageDraft, MessageFolder, MessageLabel } from '../types';
 import { buildMessagePreview } from '../utils/messagePreview';
+import { useAuthStore } from './authStore';
 
-type FolderType = 'inbox' | 'sent' | 'drafts' | 'starred' | 'trash' | 'custom' | 'label';
+type FolderType = 'inbox' | 'sent' | 'drafts' | 'starred' | 'trash' | 'archive' | 'custom' | 'label';
 
 interface DraftPayload {
   subject?: string;
@@ -271,8 +272,13 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   },
 
   startReplyAll: (message) => {
+    const currentUserId = useAuthStore.getState().user?.id;
     const recipientIds = Array.from(
-      new Set([message.sender.id, ...message.recipients.map((recipient) => recipient.id)].filter(Boolean))
+      new Set(
+        [message.sender.id, ...message.recipients.map((recipient) => recipient.id)].filter(
+          (recipientId): recipientId is string => Boolean(recipientId) && recipientId !== currentUserId
+        )
+      )
     );
 
     set({

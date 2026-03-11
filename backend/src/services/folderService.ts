@@ -144,15 +144,15 @@ export async function getFolders(userId: string): Promise<FolderDto[]> {
           prisma.messageRecipient.count({
             where: {
               userId,
-              archivedAt: { not: null },
               deletedAt: null,
+              folderId: folder.id,
             },
           }),
           prisma.messageRecipient.count({
             where: {
               userId,
-              archivedAt: { not: null },
               deletedAt: null,
+              folderId: folder.id,
               isRead: false,
             },
           }),

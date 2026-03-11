@@ -391,6 +391,8 @@ export interface LearningMaterialListItem {
   assignedUserIds: string[];
   assignedDepartmentIds: string[];
   expiresAt: string | null;
+  archivedAt: string | null;
+  isArchived: boolean;
   isExpired: boolean;
   canEdit: boolean;
   canOpen: boolean;
@@ -410,6 +412,8 @@ export interface LearningMaterialDetail {
   assignedUserIds: string[];
   assignedDepartmentIds: string[];
   expiresAt: string | null;
+  archivedAt: string | null;
+  isArchived: boolean;
   isExpired: boolean;
   isPublished: boolean;
   canEdit: boolean;
@@ -555,6 +559,8 @@ export interface TestListItem {
   showCorrectAnswers: boolean;
   timeLimit: number | null;
   maxAttempts: number | null;
+  archivedAt: string | null;
+  isArchived: boolean;
   questionCount: number;
   assignToAll: boolean;
   assignedUserIds: string[];
@@ -619,6 +625,8 @@ export interface TestDetail {
   showCorrectAnswers: boolean;
   maxAttempts: number | null;
   isPublished: boolean;
+  archivedAt: string | null;
+  isArchived: boolean;
   createdAt: string;
   updatedAt: string;
   questions: TestQuestion[];

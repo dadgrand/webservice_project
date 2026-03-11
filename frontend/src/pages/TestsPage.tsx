@@ -26,6 +26,7 @@ import {
   ListItemAvatar,
   ListItemButton,
   ListItemText,
+  Menu,
   MenuItem,
   Paper,
   Radio,
@@ -39,6 +40,7 @@ import {
 import Grid from '@mui/material/Grid2';
 import {
   Add,
+  Archive,
   AssignmentTurnedIn,
   CheckCircle,
   CloudDownload,
@@ -55,6 +57,7 @@ import {
   Send,
   SmartDisplay,
   Upload,
+  Unarchive,
   Visibility,
   Warning,
 } from '@mui/icons-material';
@@ -124,6 +127,14 @@ interface PrefetchedMediaEntry {
   objectUrl: string;
   textContent: string | null;
   docxHtml: string | null;
+}
+
+type TestListMode = 'active' | 'archive';
+
+interface TestContextMenuState {
+  mouseX: number;
+  mouseY: number;
+  test: TestListItem;
 }
 
 function makeId(): string {
@@ -578,6 +589,7 @@ const TestsPage: React.FC = () => {
 
   const [summary, setSummary] = useState<TestSummary | null>(null);
   const [tests, setTests] = useState<TestListItem[]>([]);
+  const [testListMode, setTestListMode] = useState<TestListMode>('active');
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const [selectedTest, setSelectedTest] = useState<TestDetail | null>(null);
   const [loadingList, setLoadingList] = useState(false);
@@ -611,6 +623,7 @@ const TestsPage: React.FC = () => {
   const [preparingTest, setPreparingTest] = useState(false);
   const [prepareProgress, setPrepareProgress] = useState(0);
   const [prefetchedMedia, setPrefetchedMedia] = useState<Record<string, PrefetchedMediaEntry>>({});
+  const [testContextMenu, setTestContextMenu] = useState<TestContextMenuState | null>(null);
 
   const takingRef = useRef(false);
   const selectedTestRef = useRef<TestDetail | null>(null);
@@ -648,6 +661,7 @@ const TestsPage: React.FC = () => {
     const sorted = [...selectedTest.questions].sort((a, b) => a.order - b.order);
     return sorted[activeStageIndex] || null;
   }, [selectedTest, activeStageIndex]);
+  const showArchivedTests = canEditTests && testListMode === 'archive';
 
   const buildSubmitPayload = useCallback(() => {
     return {
@@ -681,7 +695,10 @@ const TestsPage: React.FC = () => {
     setLoadingList(true);
     setError(null);
     try {
-      const [summaryData, testsData] = await Promise.all([testService.getSummary(), testService.listTests()]);
+      const [summaryData, testsData] = await Promise.all([
+        testService.getSummary(),
+        testService.listTests({ archived: showArchivedTests }),
+      ]);
       setSummary(summaryData);
       setTests(testsData);
 
@@ -729,7 +746,7 @@ const TestsPage: React.FC = () => {
   useEffect(() => {
     void loadSummaryAndTests(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [showArchivedTests]);
 
   useEffect(() => {
     if (selectedTestId) {
@@ -866,11 +883,74 @@ const TestsPage: React.FC = () => {
       const payload = toCreatePayload(createForm);
       await testService.createTest(payload);
       setCreateOpen(false);
+      if (showArchivedTests) {
+        setTestListMode('active');
+        return;
+      }
       await loadSummaryAndTests(false);
     } catch (createError) {
       setError((createError as Error).message || 'Не удалось создать тест');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const closeTestContextMenu = () => {
+    setTestContextMenu(null);
+  };
+
+  const openTestContextMenu = (event: React.MouseEvent<HTMLElement>, test: TestListItem) => {
+    if (!canEditTests) {
+      return;
+    }
+
+    event.preventDefault();
+    setSelectedTestId(test.id);
+    setTestContextMenu({
+      mouseX: event.clientX + 2,
+      mouseY: event.clientY - 6,
+      test,
+    });
+  };
+
+  const archiveTest = async () => {
+    if (!testContextMenu) return;
+
+    try {
+      await testService.archiveTest(testContextMenu.test.id);
+      closeTestContextMenu();
+      await loadSummaryAndTests(false);
+    } catch (archiveError) {
+      setError((archiveError as Error).message || 'Не удалось перенести тест в архив');
+    }
+  };
+
+  const restoreTest = async () => {
+    if (!testContextMenu) return;
+
+    try {
+      await testService.restoreTest(testContextMenu.test.id);
+      closeTestContextMenu();
+      await loadSummaryAndTests(false);
+    } catch (restoreError) {
+      setError((restoreError as Error).message || 'Не удалось вернуть тест из архива');
+    }
+  };
+
+  const deleteTest = async () => {
+    if (!testContextMenu) return;
+
+    const confirmed = window.confirm(`Удалить тест "${testContextMenu.test.title}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await testService.deleteTest(testContextMenu.test.id);
+      closeTestContextMenu();
+      await loadSummaryAndTests(false);
+    } catch (deleteError) {
+      setError((deleteError as Error).message || 'Не удалось удалить тест');
     }
   };
 
@@ -1415,6 +1495,27 @@ const TestsPage: React.FC = () => {
                   )}
                 </Stack>
 
+                {canEditTests && (
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      variant={testListMode === 'active' ? 'contained' : 'outlined'}
+                      onClick={() => setTestListMode('active')}
+                      fullWidth
+                    >
+                      Активные
+                    </Button>
+                    <Button
+                      size="small"
+                      variant={testListMode === 'archive' ? 'contained' : 'outlined'}
+                      onClick={() => setTestListMode('archive')}
+                      fullWidth
+                    >
+                      Архив
+                    </Button>
+                  </Stack>
+                )}
+
                 <TextField
                   size="small"
                   fullWidth
@@ -1443,6 +1544,7 @@ const TestsPage: React.FC = () => {
                     <ListItemButton
                       selected={selectedTestId === test.id}
                       onClick={() => setSelectedTestId(test.id)}
+                      onContextMenu={(event) => openTestContextMenu(event, test)}
                       sx={{ borderRadius: 0 }}
                     >
                       <ListItemText
@@ -1468,7 +1570,7 @@ const TestsPage: React.FC = () => {
 
                 {filteredTests.length === 0 && (
                   <ListItem>
-                    <ListItemText primary="Тесты не найдены" />
+                    <ListItemText primary={showArchivedTests ? 'Архив пуст' : 'Тесты не найдены'} />
                   </ListItem>
                 )}
               </List>
@@ -1517,6 +1619,12 @@ const TestsPage: React.FC = () => {
                   {taking && (
                     <Alert severity="info">
                       Режим прохождения активен. Тест открыт в полноэкранном окне.
+                    </Alert>
+                  )}
+
+                  {selectedTest.isArchived && (
+                    <Alert severity="info">
+                      Тест находится в архиве и недоступен для прохождения сотрудниками.
                     </Alert>
                   )}
 
@@ -1595,6 +1703,33 @@ const TestsPage: React.FC = () => {
             )}
         </Card>
       </Box>
+
+      <Menu
+        open={Boolean(testContextMenu)}
+        onClose={closeTestContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          testContextMenu
+            ? { top: testContextMenu.mouseY, left: testContextMenu.mouseX }
+            : undefined
+        }
+      >
+        {showArchivedTests ? (
+          <MenuItem onClick={() => void restoreTest()}>
+            <Unarchive fontSize="small" sx={{ mr: 1 }} />
+            Вернуть из архива
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={() => void archiveTest()}>
+            <Archive fontSize="small" sx={{ mr: 1 }} />
+            Перенести в архив
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => void deleteTest()} sx={{ color: 'error.main' }}>
+          <Delete fontSize="small" sx={{ mr: 1 }} />
+          Удалить
+        </MenuItem>
+      </Menu>
 
       <Dialog open={preparingTest} maxWidth="sm" fullWidth>
         <DialogContent sx={{ py: 4 }}>

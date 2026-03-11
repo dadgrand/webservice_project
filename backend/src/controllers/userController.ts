@@ -5,12 +5,14 @@ import * as permissionService from '../services/permissionService.js';
 import { sendSuccess, sendError, sendPaginated, getPaginationParams } from '../utils/response.js';
 import { AuthRequest } from '../types/index.js';
 import { generateRandomPassword } from '../utils/auth.js';
+import { isValidRussianPhone } from '../utils/phone.js';
 
 // Валидаторы
 export const createUserValidation = [
   body('email').isEmail().withMessage('Введите корректный email'),
   body('firstName').notEmpty().withMessage('Имя обязательно'),
   body('lastName').notEmpty().withMessage('Фамилия обязательна'),
+  body('phone').optional({ nullable: true }).custom((value) => isValidRussianPhone(value)).withMessage('Телефон должен быть в формате +7-999-999-99-99'),
   body('password')
     .optional()
     .isLength({ min: 8 })
@@ -20,6 +22,7 @@ export const createUserValidation = [
 export const updateUserValidation = [
   param('id').isUUID().withMessage('Некорректный ID пользователя'),
   body('email').optional().isEmail().withMessage('Введите корректный email'),
+  body('phone').optional({ nullable: true }).custom((value) => isValidRussianPhone(value)).withMessage('Телефон должен быть в формате +7-999-999-99-99'),
 ];
 
 // Контроллеры

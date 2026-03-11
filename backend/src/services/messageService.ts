@@ -346,15 +346,23 @@ export async function moveToFolder(
   folderId: string | null,
   applyToThread = false
 ): Promise<boolean> {
+  let normalizedFolderId: string | null = folderId;
+
   if (folderId) {
     const folder = await prisma.messageFolder.findFirst({
-      where: { id: folderId, userId, type: 'custom' },
-      select: { id: true },
+      where: { id: folderId, userId },
+      select: { id: true, type: true, name: true },
     });
 
-    if (!folder) {
+    const canUseFolder = Boolean(
+      folder && (folder.type === 'custom' || (folder.type === 'system' && folder.name === 'archive'))
+    );
+
+    if (!canUseFolder) {
       return false;
     }
+
+    normalizedFolderId = folder?.id ?? null;
   }
 
   const scope = await getRecipientMessageScope(userId, messageId, applyToThread);
@@ -364,7 +372,7 @@ export async function moveToFolder(
 
   const result = await prisma.messageRecipient.updateMany({
     where: { id: { in: scope.recipientIds } },
-    data: { folderId, deletedAt: null, archivedAt: null },
+    data: { folderId: normalizedFolderId, deletedAt: null, archivedAt: null },
   });
 
   return result.count > 0;

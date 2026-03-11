@@ -26,6 +26,7 @@ import {
 import Grid from '@mui/material/Grid2';
 import { userService, contactService } from '../services';
 import type { User, CreateUserRequest, Permission, Department } from '../types';
+import { formatRussianPhone, isValidRussianPhone, RUSSIAN_PHONE_PLACEHOLDER } from '../utils/phone';
 
 interface Props {
   open: boolean;
@@ -98,7 +99,7 @@ export default function UserFormDialog({ open, onClose, user }: Props) {
           middleName: user.middleName || '',
           position: user.position || '',
           departmentId: user.departmentId || '',
-          phone: user.phone || '',
+          phone: formatRussianPhone(user.phone),
           password: '',
           isAdmin: user.isAdmin,
           isActive: user.isActive,
@@ -287,7 +288,26 @@ export default function UserFormDialog({ open, onClose, user }: Props) {
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField fullWidth size="small" label="Телефон" {...register('phone')} />
+                    <Controller
+                      name="phone"
+                      control={control}
+                      rules={{
+                        validate: (value) => isValidRussianPhone(value) || `Формат: ${RUSSIAN_PHONE_PLACEHOLDER}`,
+                      }}
+                      render={({ field }) => (
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Телефон"
+                          value={field.value || ''}
+                          onChange={(event) => field.onChange(formatRussianPhone(event.target.value))}
+                          inputMode="tel"
+                          placeholder={RUSSIAN_PHONE_PLACEHOLDER}
+                          error={!!errors.phone}
+                          helperText={errors.phone?.message || ' '}
+                        />
+                      )}
+                    />
                   </Grid>
 
                   <Grid size={{ xs: 12, sm: 6 }}>

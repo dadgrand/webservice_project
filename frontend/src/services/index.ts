@@ -507,8 +507,14 @@ export const learningService = {
     return response.data.data!;
   },
 
-  async listMaterials(): Promise<LearningMaterialListItem[]> {
-    const response = await api.get<ApiResponse<LearningMaterialListItem[]>>('/learning');
+  async listMaterials(params?: { archived?: boolean }): Promise<LearningMaterialListItem[]> {
+    const query = new URLSearchParams();
+    if (params?.archived) {
+      query.append('archived', 'true');
+    }
+
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const response = await api.get<ApiResponse<LearningMaterialListItem[]>>(`/learning${suffix}`);
     return response.data.data || [];
   },
 
@@ -520,6 +526,18 @@ export const learningService = {
   async createMaterial(data: CreateLearningMaterialRequest): Promise<LearningMaterialDetail> {
     const response = await api.post<ApiResponse<LearningMaterialDetail>>('/learning', data);
     return response.data.data!;
+  },
+
+  async archiveMaterial(id: string): Promise<void> {
+    await api.post(`/learning/${id}/archive`);
+  },
+
+  async restoreMaterial(id: string): Promise<void> {
+    await api.post(`/learning/${id}/restore`);
+  },
+
+  async deleteMaterial(id: string): Promise<void> {
+    await api.delete(`/learning/${id}`);
   },
 
   async markVisited(id: string, pageId?: string): Promise<void> {
@@ -565,8 +583,14 @@ export const testService = {
     return response.data.data!;
   },
 
-  async listTests(): Promise<TestListItem[]> {
-    const response = await api.get<ApiResponse<TestListItem[]>>('/tests');
+  async listTests(params?: { archived?: boolean }): Promise<TestListItem[]> {
+    const query = new URLSearchParams();
+    if (params?.archived) {
+      query.append('archived', 'true');
+    }
+
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const response = await api.get<ApiResponse<TestListItem[]>>(`/tests${suffix}`);
     return response.data.data || [];
   },
 
@@ -578,6 +602,18 @@ export const testService = {
   async createTest(data: CreateTestRequest): Promise<TestDetail> {
     const response = await api.post<ApiResponse<TestDetail>>('/tests', data);
     return response.data.data!;
+  },
+
+  async archiveTest(id: string): Promise<void> {
+    await api.post(`/tests/${id}/archive`);
+  },
+
+  async restoreTest(id: string): Promise<void> {
+    await api.post(`/tests/${id}/restore`);
+  },
+
+  async deleteTest(id: string): Promise<void> {
+    await api.delete(`/tests/${id}`);
   },
 
   async uploadFile(file: File): Promise<TestMediaFile> {
