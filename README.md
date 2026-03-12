@@ -4,6 +4,117 @@
 
 Если по-простому, это единая точка входа для внутренней коммуникации и рабочих материалов. Здесь можно быстро найти коллегу, написать сообщение, разослать документ, назначить обучение, провести тестирование и держать организационную структуру в актуальном виде.
 
+## Администратору: ручной запуск
+
+Этот блок предназначен для системного администратора, который хочет поднять проект полностью вручную, без `install.sh` / `install.ps1`.
+
+### Что нужно скачать заранее
+
+- Windows: `Docker Desktop for Windows` - <https://www.docker.com/products/docker-desktop/>
+- macOS: `Docker Desktop for Mac` - <https://www.docker.com/products/docker-desktop/>
+- Linux: `Docker Engine` - <https://docs.docker.com/engine/install/> и `Docker Compose plugin` - <https://docs.docker.com/compose/install/linux/>
+
+Для ручного production-запуска больше ничего не требуется: отдельно ставить `Node.js`, `npm` или `PostgreSQL` на хост-машину не нужно.
+
+### Первый чистый запуск вручную
+
+1. Подготовить проект:
+
+```bash
+git clone <repo-url>
+cd webservice_project
+cp .env.example .env
+```
+
+2. Открыть `.env` и задать как минимум эти значения:
+
+```env
+POSTGRES_PASSWORD=strong-db-password
+JWT_SECRET=strong-jwt-secret
+FRONTEND_URLS=http://localhost:8080,http://127.0.0.1:8080
+BOOTSTRAP_ADMIN_EMAIL=admin@hospital.local
+BOOTSTRAP_ADMIN_PASSWORD=StrongPass123!
+POSTGRES_PORT=5432
+BACKEND_PORT=3001
+FRONTEND_PORT=8080
+```
+
+3. Выполнить именно чистый первый старт:
+
+```bash
+docker compose down -v --remove-orphans
+docker compose up -d --build
+```
+
+4. Проверить, что контейнеры действительно поднялись:
+
+```bash
+docker compose ps
+docker compose logs -f backend
+```
+
+5. Открыть в браузере:
+
+```text
+http://localhost:8080
+```
+
+Если вы меняли `FRONTEND_PORT`, используйте свой порт. Если на машине уже заняты `5432`, `3001` или `8080`, для ручного запуска поменяйте их в `.env` заранее. Автоподбор свободных портов есть в `install.sh` / `install.ps1`, но не в ручном сценарии.
+
+### Первый вход администратора
+
+После первого запуска backend сам:
+
+- применяет Prisma migration;
+- синхронизирует системные разрешения;
+- создаёт первого администратора из `BOOTSTRAP_ADMIN_EMAIL` и `BOOTSTRAP_ADMIN_PASSWORD`.
+
+В результате чистая delivery-установка должна стартовать так:
+
+- в базе есть только `1` активный администратор;
+- лишние пользователи не создаются;
+- demo-отделения не создаются;
+- `npm run db:seed` для заказчика запускать не нужно.
+
+Для входа используйте ровно те логин и пароль, которые указаны в `.env`:
+
+- email: значение `BOOTSTRAP_ADMIN_EMAIL`
+- пароль: значение `BOOTSTRAP_ADMIN_PASSWORD`
+
+### Полезные команды администратора
+
+Запуск уже собранного проекта:
+
+```bash
+docker compose up -d
+```
+
+Остановка проекта:
+
+```bash
+docker compose down
+```
+
+Перезапуск после изменения конфигурации:
+
+```bash
+docker compose up -d --build
+```
+
+Просмотр логов:
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f postgres
+```
+
+Полный чистый сброс перед новой установкой:
+
+```bash
+docker compose down -v --remove-orphans
+```
+
 ## Что можно делать в системе
 
 ### Для сотрудников
