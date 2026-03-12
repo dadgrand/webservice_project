@@ -12,6 +12,8 @@ import ReactFlow, {
   MiniMap,
   ReactFlowProvider,
   Panel,
+  useReactFlow,
+  type Viewport,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box, Button, CircularProgress, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
@@ -135,6 +137,7 @@ const OrgChartViewer: React.FC = () => {
   const [edges, setEdges, baseOnEdgesChange] = useEdgesState(initialEdges);
   const [loading, setLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
+  const reactFlow = useReactFlow();
   
   // Node edit dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -181,8 +184,13 @@ const OrgChartViewer: React.FC = () => {
   }, [baseOnEdgesChange]);
 
   // Fetch tree data
-  const loadTreeData = useCallback(async () => {
-    setLoading(true);
+  const loadTreeData = useCallback(async ({ preserveViewport = false }: { preserveViewport?: boolean } = {}) => {
+    const viewport: Viewport | null = preserveViewport ? reactFlow.getViewport() : null;
+
+    if (!preserveViewport) {
+      setLoading(true);
+    }
+
     try {
       const data = await orgTreeService.getTree();
       setTreeData(data);
@@ -212,12 +220,20 @@ const OrgChartViewer: React.FC = () => {
       
       setNodes(layoutedNodes);
       setEdges(rfEdges);
+
+      if (viewport) {
+        window.requestAnimationFrame(() => {
+          reactFlow.setViewport(viewport, { duration: 0 });
+        });
+      }
     } catch (error) {
       console.error('Failed to load org tree:', error);
     } finally {
-      setLoading(false);
+      if (!preserveViewport) {
+        setLoading(false);
+      }
     }
-  }, [isAdmin, setNodes, setEdges]);
+  }, [isAdmin, reactFlow, setNodes, setEdges]);
 
    useEffect(() => {
      loadTreeData();
@@ -347,7 +363,7 @@ const OrgChartViewer: React.FC = () => {
     if (confirmed) {
       try {
         await orgTreeService.deleteNode(contextMenu.nodeId);
-        loadTreeData();
+        loadTreeData({ preserveViewport: true });
       } catch (error) {
         console.error('Failed to delete node:', error);
         alert('Ошибка удаления узла');
@@ -363,7 +379,7 @@ const OrgChartViewer: React.FC = () => {
   };
   
   const handleDialogSave = () => {
-    loadTreeData();
+    loadTreeData({ preserveViewport: true });
     setIsDirty(false);
   };
   
