@@ -174,10 +174,15 @@ const MessageView: React.FC = () => {
             {message.isImportant && (
               <Chip label="Важно" color="error" size="small" sx={{ ml: 2, verticalAlign: 'middle' }} />
             )}
+            {isStarred && (
+              <Chip label="В избранном" color="warning" size="small" variant="outlined" sx={{ ml: 1, verticalAlign: 'middle' }} />
+            )}
           </Typography>
-          <IconButton onClick={handleToggleStar}>
-             {isStarred ? <Star color="warning" /> : <StarBorder />}
-          </IconButton>
+          <Tooltip title={isStarred ? 'Убрать из избранного' : 'Добавить в избранное'}>
+            <IconButton onClick={handleToggleStar}>
+               {isStarred ? <Star color="warning" /> : <StarBorder />}
+            </IconButton>
+          </Tooltip>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>

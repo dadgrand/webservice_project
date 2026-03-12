@@ -16,8 +16,20 @@ import {
   InputAdornment,
   Menu,
   MenuItem,
+  Stack,
+  Tooltip,
 } from '@mui/material';
-import { Search, Clear, CreateNewFolder, LabelOutlined, BookmarkRounded } from '@mui/icons-material';
+import {
+  Search,
+  Clear,
+  CreateNewFolder,
+  LabelOutlined,
+  BookmarkRounded,
+  AttachFile,
+  FilterAltOff,
+  Star,
+  StarBorder,
+} from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useMessageStore } from '../../../store/messageStore';
@@ -32,6 +44,8 @@ const MessageList: React.FC = () => {
   const [localSearch, setLocalSearch] = useState('');
   const [searchResults, setSearchResults] = useState<InboxMessage[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [showStarredOnly, setShowStarredOnly] = useState(false);
+  const [showAttachmentsOnly, setShowAttachmentsOnly] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ mouseX: number; mouseY: number; messageId: string } | null>(null);
   const [organizationState, setOrganizationState] = useState<{ mode: 'folder' | 'label' | null; messageId: string | null }>({
     mode: null,
@@ -108,7 +122,24 @@ const MessageList: React.FC = () => {
 
   // Use search results if available, otherwise use messages from store
   const displayMessages = searchResults !== null ? searchResults : messages;
+  const starredFilterEnabled = currentFolderType === 'starred' || showStarredOnly;
+  const filteredMessages = displayMessages.filter((message) => {
+    if (starredFilterEnabled && !message.isStarred) {
+      return false;
+    }
+
+    if (showAttachmentsOnly && !message.hasAttachments) {
+      return false;
+    }
+
+    return true;
+  });
   const showLoading = isLoading || searching;
+
+  const resetFilters = () => {
+    setShowStarredOnly(false);
+    setShowAttachmentsOnly(false);
+  };
 
   const renderLabelMarkers = (message: InboxMessage) => {
     if (!message.labels || message.labels.length === 0) {
@@ -140,6 +171,41 @@ const MessageList: React.FC = () => {
     );
   };
 
+  const renderFilterBar = () => (
+    <Stack direction="row" spacing={0.8} sx={{ mt: 1, flexWrap: 'wrap' }} useFlexGap>
+      <Chip
+        size="small"
+        icon={starredFilterEnabled ? <Star /> : <StarBorder />}
+        label="Избранные"
+        color={starredFilterEnabled ? 'warning' : 'default'}
+        variant={starredFilterEnabled ? 'filled' : 'outlined'}
+        onClick={() => {
+          if (currentFolderType !== 'starred') {
+            setShowStarredOnly((prev) => !prev);
+          }
+        }}
+        disabled={currentFolderType === 'starred'}
+      />
+      <Chip
+        size="small"
+        icon={<AttachFile />}
+        label="С вложениями"
+        color={showAttachmentsOnly ? 'primary' : 'default'}
+        variant={showAttachmentsOnly ? 'filled' : 'outlined'}
+        onClick={() => setShowAttachmentsOnly((prev) => !prev)}
+      />
+      {(showStarredOnly || showAttachmentsOnly) && currentFolderType !== 'starred' && (
+        <Chip
+          size="small"
+          icon={<FilterAltOff />}
+          label="Сбросить"
+          variant="outlined"
+          onClick={resetFilters}
+        />
+      )}
+    </Stack>
+  );
+
   if (showLoading) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -166,6 +232,7 @@ const MessageList: React.FC = () => {
               ),
             }}
           />
+          {renderFilterBar()}
         </Box>
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexGrow: 1 }}>
           <CircularProgress />
@@ -174,7 +241,7 @@ const MessageList: React.FC = () => {
     );
   }
 
-  if (displayMessages.length === 0) {
+  if (filteredMessages.length === 0) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Search bar */}
@@ -200,9 +267,10 @@ const MessageList: React.FC = () => {
               ),
             }}
           />
+          {renderFilterBar()}
         </Box>
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexGrow: 1, color: 'text.secondary' }}>
-          <Typography>{searchResults !== null ? 'Сообщения не найдены' : 'Нет сообщений'}</Typography>
+          <Typography>{searchResults !== null || showStarredOnly || showAttachmentsOnly ? 'Сообщения не найдены' : 'Нет сообщений'}</Typography>
         </Box>
       </Box>
     );
@@ -233,9 +301,10 @@ const MessageList: React.FC = () => {
             ),
           }}
         />
+        {renderFilterBar()}
         {searchResults !== null && (
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            Найдено: {searchResults.length} сообщений
+            Найдено: {filteredMessages.length} сообщений
           </Typography>
         )}
       </Box>
@@ -253,7 +322,7 @@ const MessageList: React.FC = () => {
          scrollbarWidth: 'none',
          msOverflowStyle: 'none',
        }}>
-        {displayMessages.map((message) => (
+        {filteredMessages.map((message) => (
           <React.Fragment key={message.id}>
           <ListItem disablePadding sx={{ px: 1, py: 0.65 }}>
             <ListItemButton
@@ -308,6 +377,16 @@ const MessageList: React.FC = () => {
                         {message.subject || '(Без темы)'}
                       </Typography>
                       {renderLabelMarkers(message)}
+                      {message.hasAttachments && (
+                        <Tooltip title="Есть вложения">
+                          <AttachFile sx={{ fontSize: '1rem', color: 'text.secondary', ml: 0.75 }} />
+                        </Tooltip>
+                      )}
+                      {message.isStarred && (
+                        <Tooltip title="В избранном">
+                          <Star sx={{ fontSize: '1rem', color: 'warning.main', ml: 0.5 }} />
+                        </Tooltip>
+                      )}
                       {message.threadMessageCount > 1 && (
                         <Chip
                           size="small"

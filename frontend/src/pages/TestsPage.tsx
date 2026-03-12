@@ -77,6 +77,7 @@ import type {
 import { PermissionCodes } from '../types';
 import { useHasPermission } from '../store/authStore';
 import { shellInnerPanelSx } from '../styles/shell';
+import { normalizeUploadedFileName } from '../utils/fileName';
 
 interface QuestionDraft {
   localId: string;
@@ -154,6 +155,12 @@ function fullName(firstName: string, lastName: string, middleName?: string | nul
   return `${lastName} ${firstName}${middleName ? ` ${middleName}` : ''}`;
 }
 
+function getAttemptStatusLabel(status: TestAttempt['status']): string {
+  if (status === 'completed') return 'Завершена';
+  if (status === 'pending_review') return 'Ждет проверки';
+  return 'Проверена';
+}
+
 function isImage(file: TestMediaFile): boolean {
   return file.mimeType.startsWith('image/');
 }
@@ -212,26 +219,6 @@ function isTextFile(file: TestMediaFile): boolean {
     mime.endsWith('+xml');
 
   return textByName || textByMime;
-}
-
-function normalizeUploadedFileName(fileName: string): string {
-  if ([...fileName].some((char) => char.charCodeAt(0) > 255)) {
-    return fileName;
-  }
-
-  try {
-    const bytes = Uint8Array.from(fileName, (char) => char.charCodeAt(0) & 0xff);
-    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    const sourceHasCyrillic = /[А-Яа-яЁё]/.test(fileName);
-    const decodedHasCyrillic = /[А-Яа-яЁё]/.test(decoded);
-    if (!sourceHasCyrillic && decodedHasCyrillic) {
-      return decoded;
-    }
-  } catch {
-    // Keep original if conversion failed.
-  }
-
-  return fileName;
 }
 
 const testsPanelSx = {
@@ -1649,7 +1636,7 @@ const TestsPage: React.FC = () => {
                     <Paper variant="outlined" sx={{ ...shellInnerPanelSx, p: 2 }}>
                       <Typography variant="subtitle1">Последняя попытка</Typography>
                       <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                        <Chip label={`Статус: ${selectedTest.myLatestAttempt.status}`} />
+                        <Chip label={`Статус: ${getAttemptStatusLabel(selectedTest.myLatestAttempt.status)}`} />
                         <Chip label={`Результат: ${selectedTest.myLatestAttempt.percentage}%`} color={selectedTest.myLatestAttempt.isPassed ? 'success' : 'warning'} />
                       </Stack>
                     </Paper>

@@ -1,9 +1,11 @@
 import { Router } from 'express';
+import multer from 'multer';
 import * as contactController from '../controllers/contactController.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { createRateLimitMiddleware } from '../middleware/rateLimit.js';
 import { validate } from '../middleware/validate.js';
 import { uploadAvatarConfig } from '../config/multerAvatar.js';
+import { sendError } from '../utils/response.js';
 
 const router = Router();
 const avatarUploadRateLimit = createRateLimitMiddleware({
@@ -11,6 +13,32 @@ const avatarUploadRateLimit = createRateLimitMiddleware({
   windowMs: 10 * 60 * 1000,
   message: 'Слишком много загрузок аватара. Повторите позже.',
 });
+const avatarUploadMiddleware = uploadAvatarConfig.single('avatar');
+
+function handleAvatarUpload(
+  req: Parameters<typeof avatarUploadMiddleware>[0],
+  res: Parameters<typeof avatarUploadMiddleware>[1],
+  next: Parameters<typeof avatarUploadMiddleware>[2]
+) {
+  avatarUploadMiddleware(req, res, (error) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      sendError(res, 'Фотография слишком большая. Загрузите файл размером до 5 МБ.', 400);
+      return;
+    }
+
+    if (error instanceof Error && error.message === 'Неподдерживаемый тип файла') {
+      sendError(res, 'Поддерживаются JPG, JPEG, PNG, GIF, SVG и WEBP. Максимальный размер файла - 5 МБ.', 400);
+      return;
+    }
+
+    sendError(res, error instanceof Error ? error.message : 'Ошибка загрузки аватара', 400);
+  });
+}
 
 // Все маршруты требуют аутентификации
 router.use(authenticate);
@@ -26,7 +54,7 @@ router.put(
 );
 
 // POST /api/contacts/me/avatar - Загрузить аватар
-router.post('/me/avatar', avatarUploadRateLimit, uploadAvatarConfig.single('avatar'), contactController.uploadAvatar);
+router.post('/me/avatar', avatarUploadRateLimit, handleAvatarUpload, contactController.uploadAvatar);
 
 // GET /api/contacts/departments - Список отделений
 router.get('/departments', contactController.getDepartments);

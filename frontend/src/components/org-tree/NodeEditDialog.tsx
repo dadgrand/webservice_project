@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -27,7 +27,7 @@ interface NodeEditDialogProps {
   open: boolean;
   node: OrgTreeNode | null; // null for creating new node
   parentId?: string | null; // parent node id for new nodes
-  allNodes: { id: string; label: string }[]; // available parent nodes
+  allNodes: { id: string; label: string; parentId: string | null }[]; // available parent nodes
   onClose: () => void;
   onSave: () => void; // called after save to refresh tree
   onDelete?: () => void; // called after delete
@@ -165,6 +165,10 @@ const NodeEditDialog: React.FC<NodeEditDialogProps> = ({
       setError('Выберите отдел или введите название');
       return;
     }
+    if (selectedParentId && invalidParentIds.has(selectedParentId)) {
+      setError('Нельзя сделать дочерний узел родителем текущего узла');
+      return;
+    }
     
     setSaving(true);
     try {
@@ -220,6 +224,48 @@ const NodeEditDialog: React.FC<NodeEditDialogProps> = ({
   
   const selectedUser = users.find(u => u.id === linkedUserId);
   const selectedDepartment = departments.find(d => d.id === departmentId);
+  const invalidParentIds = useMemo(() => {
+    if (!node?.id) {
+      return new Set<string>();
+    }
+
+    const childrenByParent = new Map<string, string[]>();
+    allNodes.forEach((item) => {
+      if (!item.parentId) {
+        return;
+      }
+
+      const children = childrenByParent.get(item.parentId) || [];
+      children.push(item.id);
+      childrenByParent.set(item.parentId, children);
+    });
+
+    const invalidIds = new Set<string>([node.id]);
+    const queue = [node.id];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (!currentId) {
+        continue;
+      }
+
+      const children = childrenByParent.get(currentId) || [];
+      children.forEach((childId) => {
+        if (invalidIds.has(childId)) {
+          return;
+        }
+
+        invalidIds.add(childId);
+        queue.push(childId);
+      });
+    }
+
+    return invalidIds;
+  }, [allNodes, node?.id]);
+  const availableParentNodes = useMemo(
+    () => allNodes.filter((item) => !invalidParentIds.has(item.id)),
+    [allNodes, invalidParentIds]
+  );
   
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -263,9 +309,7 @@ const NodeEditDialog: React.FC<NodeEditDialogProps> = ({
               <MenuItem value="">
                 <em>Корневой (нет родителя)</em>
               </MenuItem>
-              {allNodes
-                .filter(n => n.id !== node?.id) // Can't be parent of itself
-                .map(n => (
+              {availableParentNodes.map(n => (
                   <MenuItem key={n.id} value={n.id}>
                     {n.label}
                   </MenuItem>

@@ -409,7 +409,17 @@ export default function UserFormDialog({ open, onClose, user }: Props) {
                       <Box>
                         {Object.entries(permissionsByCategory).map(([category, perms]) => (
                           <Box key={category} sx={{ mb: 1.5 }}>
-                            <Chip label={categoryNames[category] || category} size="small" sx={{ mb: 0.5, fontWeight: 'bold', bgcolor: 'primary.light', color: 'white' }} />
+                            <Chip
+                              label={categoryNames[category] || category}
+                              size="small"
+                              sx={{
+                                mb: 0.5,
+                                fontWeight: 700,
+                                bgcolor: 'rgba(29, 122, 143, 0.16)',
+                                color: 'text.primary',
+                                border: '1px solid rgba(29, 122, 143, 0.24)',
+                              }}
+                            />
                             <FormGroup row sx={{ '& .MuiFormControlLabel-root': { mr: 1.5, mb: 0.5 } }}>
                               {perms.map((perm) => (
                                 <FormControlLabel

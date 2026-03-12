@@ -57,6 +57,7 @@ export default function Layout({ children }: Props) {
   const [desktopSidebarHovered, setDesktopSidebarHovered] = useState(false);
   const [desktopSidebarProximity, setDesktopSidebarProximity] = useState(0);
   const [desktopHoveredItem, setDesktopHoveredItem] = useState<string | null>(null);
+  const [orgTreeHasUnsavedChanges, setOrgTreeHasUnsavedChanges] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -130,6 +131,18 @@ export default function Layout({ children }: Props) {
     };
   }, [desktopSidebarHovered, isMobile]);
 
+  useEffect(() => {
+    const handleDirtyState = (event: Event) => {
+      const detail = (event as CustomEvent<{ isDirty?: boolean }>).detail;
+      setOrgTreeHasUnsavedChanges(Boolean(detail?.isDirty));
+    };
+
+    window.addEventListener('org-tree-dirty-state', handleDirtyState as EventListener);
+    return () => {
+      window.removeEventListener('org-tree-dirty-state', handleDirtyState as EventListener);
+    };
+  }, []);
+
   const handleDrawerToggle = () => {
     setMobileOpen((prev) => !prev);
   };
@@ -143,11 +156,28 @@ export default function Layout({ children }: Props) {
   };
 
   const handleLogout = () => {
+    if (
+      location.pathname.startsWith('/org-tree') &&
+      orgTreeHasUnsavedChanges &&
+      !window.confirm('В структуре есть несохраненные изменения. Выйти без сохранения?')
+    ) {
+      return;
+    }
+
     logout();
     navigate('/login');
   };
 
   const handleNavigate = (path: string) => {
+    if (
+      path !== location.pathname &&
+      location.pathname.startsWith('/org-tree') &&
+      orgTreeHasUnsavedChanges &&
+      !window.confirm('В структуре есть несохраненные изменения. Выйти без сохранения?')
+    ) {
+      return;
+    }
+
     navigate(path);
     if (isMobile) {
       setMobileOpen(false);
@@ -362,7 +392,7 @@ export default function Layout({ children }: Props) {
             <MenuItem
               onClick={() => {
                 handleMenuClose();
-                navigate('/settings');
+                handleNavigate('/settings');
               }}
             >
               <ListItemIcon>
@@ -474,6 +504,7 @@ export default function Layout({ children }: Props) {
                 const normalizedDistance =
                   Math.abs(index - centerIndex) / Math.max(centerIndex, 1);
                 const arcOffset = (1 - Math.min(normalizedDistance, 1) ** 1.6) * 12;
+                const expandedWidth = Math.max(176, Math.min(212, 64 + item.text.length * 10));
 
                 return (
                   <Box
@@ -489,7 +520,7 @@ export default function Layout({ children }: Props) {
                       onMouseLeave={() => setDesktopHoveredItem((current) => (current === item.path ? null : current))}
                       sx={{
                         position: 'relative',
-                        width: isHovered ? 164 : 54,
+                        width: isHovered ? expandedWidth : 54,
                         height: isHovered ? 56 : 54,
                         px: isHovered ? 1.35 : 0,
                         justifyContent: 'flex-start',
@@ -530,9 +561,13 @@ export default function Layout({ children }: Props) {
                       <Typography
                         sx={{
                           pr: isHovered ? 1.4 : 0,
+                          minWidth: 0,
+                          maxWidth: isHovered ? expandedWidth - 72 : 0,
                           fontSize: '0.84rem',
                           fontWeight: 600,
                           whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                           letterSpacing: '-0.01em',
                           color: isActive ? '#f5fafc' : '#edf4f8',
                           textShadow: isHovered ? `0 1px 12px ${alpha('#213845', 0.24)}` : 'none',

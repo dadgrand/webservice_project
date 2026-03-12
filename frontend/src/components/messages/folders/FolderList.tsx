@@ -109,6 +109,21 @@ const FolderList: React.FC = () => {
 
   const systemFolders = folders.filter((f) => f.type === 'system');
   const customFolders = folders.filter((f) => f.type === 'custom');
+  const foldersWithStarred = [
+    ...systemFolders.slice(0, 1),
+    {
+      id: 'virtual-starred',
+      name: 'Избранные',
+      type: 'system' as const,
+      icon: 'star',
+      color: null,
+      order: 1.5,
+      messageCount: 0,
+      unreadCount: 0,
+      systemName: 'starred',
+    },
+    ...systemFolders.slice(1),
+  ];
 
   return (
     <Box sx={{ p: 2.2 }}>
@@ -124,7 +139,7 @@ const FolderList: React.FC = () => {
 
       <List component="nav" sx={{ display: 'grid', gap: 0.35 }}>
         {/* System Folders */}
-        {systemFolders.map((folder) => {
+        {foldersWithStarred.map((folder) => {
           const systemName = folder.systemName || 'inbox';
           // For inbox, folderId should be null; for others, use systemName to determine type
           const isInbox = systemName === 'inbox';
@@ -136,7 +151,7 @@ const FolderList: React.FC = () => {
             <ListItem key={folder.id} disablePadding sx={{ mb: 0.5 }}>
               <ListItemButton
                 selected={isSelected}
-                onClick={() => handleFolderClick(isInbox ? null : folder.id, systemName)}
+                onClick={() => handleFolderClick(isInbox || systemName === 'starred' ? null : folder.id, systemName)}
                 sx={{ borderRadius: '14px' }}
               >
                 <ListItemIcon sx={{ minWidth: 40, color: isSelected ? 'primary.main' : 'inherit' }}>

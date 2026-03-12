@@ -10,10 +10,16 @@ export const ORG_TREE_NODE_HEIGHT = 180;
 
 // Custom Node Component
 const OrgTreeNode: React.FC<NodeProps<OrgTreeNodeType & { isAdmin?: boolean }>> = ({ data, isConnectable }) => {
-   const { linkedUser, customTitle, customSubtitle, customImageUrl, isAdmin = false } = data;
+   const { linkedUser, customTitle, customSubtitle, customImageUrl, department, isAdmin = false, type } = data;
 
-  const title = linkedUser?.position || customTitle || 'Должность';
-  const subtitle = linkedUser ? `${linkedUser.lastName} ${linkedUser.firstName}` : customSubtitle || 'Сотрудник';
+  const title = type === 'department'
+    ? customTitle || department?.name || 'Отдел'
+    : linkedUser?.position || customTitle || (type === 'position' ? 'Должность' : 'Узел');
+  const subtitle = type === 'department'
+    ? customSubtitle || department?.name || 'Отдел'
+    : linkedUser
+      ? `${linkedUser.lastName} ${linkedUser.firstName}`
+      : customSubtitle || (type === 'position' ? 'Сотрудник' : 'Произвольный блок');
   const avatarUrl = resolveMediaUrl(linkedUser?.avatarUrl || customImageUrl);
 
   return (

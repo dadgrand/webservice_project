@@ -22,6 +22,9 @@ export async function createNode(req: AuthRequest, res: Response) {
     return sendSuccess(res, node, 'Узел создан', 201);
   } catch (error) {
     console.error('Create node error:', error);
+    if (error instanceof orgTreeService.OrgTreeServiceError) {
+      return sendError(res, error.message, error.statusCode);
+    }
     return sendError(res, 'Ошибка создания узла', 500);
   }
 }
@@ -39,6 +42,9 @@ export async function updateNode(req: AuthRequest, res: Response) {
     return sendSuccess(res, node);
   } catch (error) {
     console.error('Update node error:', error);
+    if (error instanceof orgTreeService.OrgTreeServiceError) {
+      return sendError(res, error.message, error.statusCode);
+    }
     return sendError(res, 'Ошибка обновления узла', 500);
   }
 }

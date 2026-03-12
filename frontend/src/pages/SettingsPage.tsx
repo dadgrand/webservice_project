@@ -214,10 +214,13 @@ export default function SettingsPage() {
                 >
                   {isUploadingAvatar ? 'Загрузка...' : 'Изменить фотографию'}
                 </Button>
+                <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', display: 'block', px: 1 }}>
+                  Поддерживаются JPG, JPEG, PNG, GIF, SVG и WEBP до 5 МБ. Лучше использовать квадратное фото не меньше 400x400 px.
+                </Typography>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept=".jpg,.jpeg,.png,.gif,.svg,.webp"
                   onChange={handleUploadAvatar}
                   style={{ display: 'none' }}
                 />

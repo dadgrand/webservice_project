@@ -53,6 +53,7 @@ export interface InboxMessageDto {
   threadMessageCount: number;
   sender: UserSummary;
   preview: string;
+  hasAttachments: boolean;
   labels?: {
     id: string;
     name: string;
@@ -133,6 +134,7 @@ function mapInboxMessage(recipient: {
     content: string;
     threadId: string | null;
     sender: UserSummary;
+    attachments: Array<{ id: string }>;
   };
 }, threadMessageCount = 1): InboxMessageDto {
   return {
@@ -146,6 +148,7 @@ function mapInboxMessage(recipient: {
     threadMessageCount,
     sender: recipient.message.sender,
     preview: buildPreview(recipient.message.content),
+    hasAttachments: recipient.message.attachments.length > 0,
     labels: recipient.labels.map((assignment) => ({
       id: assignment.label.id,
       name: assignment.label.name,
@@ -225,6 +228,12 @@ export async function getInbox(
                 avatarUrl: true,
               },
             },
+            attachments: {
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
           },
         },
       },
@@ -284,6 +293,12 @@ export async function getStarred(
                 avatarUrl: true,
               },
             },
+            attachments: {
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
           },
         },
       },
@@ -328,6 +343,12 @@ export async function getTrash(
                 email: true,
                 avatarUrl: true,
               },
+            },
+            attachments: {
+              select: {
+                id: true,
+              },
+              take: 1,
             },
           },
         },
@@ -442,6 +463,12 @@ export async function searchMessages(
                 avatarUrl: true,
               },
             },
+            attachments: {
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
           },
         },
       },
@@ -540,6 +567,12 @@ export async function getSent(
             position: true,
           },
         },
+        attachments: {
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
       },
     }),
     prisma.message.count({ where }),
@@ -561,6 +594,7 @@ export async function getSent(
     threadMessageCount: message.threadId ? threadCountMap.get(message.threadId) ?? 1 : 1,
     sender: message.sender,
     preview: buildPreview(message.content),
+    hasAttachments: message.attachments.length > 0,
     labels: [],
     isStarred: false,
     canOrganize: false,

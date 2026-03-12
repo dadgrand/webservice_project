@@ -696,6 +696,7 @@ export default function NewsPanel() {
   const openCreate = () => {
     setEditingId(null);
     setForm(buildEmptyForm());
+    setError(null);
     setEditorOpen(true);
   };
 
@@ -707,6 +708,7 @@ export default function NewsPanel() {
       isPinned: item.isPinned,
       media: [...item.media].sort((a, b) => a.order - b.order),
     });
+    setError(null);
     setEditorOpen(true);
   };
 
@@ -883,7 +885,7 @@ export default function NewsPanel() {
       </Box>
 
       {loading && <LinearProgress />}
-      {error && <Alert severity="error">{error}</Alert>}
+      {error && !editorOpen && <Alert severity="error">{error}</Alert>}
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {filteredNews.length === 0 ? (
@@ -930,6 +932,7 @@ export default function NewsPanel() {
         <DialogTitle>{editingId ? 'Редактировать новость' : 'Создать новость'}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={1.4} sx={{ mt: 0.5 }}>
+            {error && <Alert severity="error">{error}</Alert>}
             <TextField
               label="Заголовок"
               value={form.title}

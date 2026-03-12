@@ -99,7 +99,89 @@
 
 ![Настройки профиля](docs/screenshots/settings.png)
 
-## Развертывание
+## Быстрый запуск для заказчика
+
+Это основной сценарий финальной передачи проекта. Скрипты `install.sh`, `install.ps1` и `install.cmd` рассчитаны именно на чистую первую установку без demo-данных.
+
+Что делают скрипты:
+
+- сразу печатают, что именно нужно скачать для запуска;
+- создают корневой `.env` с безопасными случайными значениями, если файла ещё нет;
+- поднимают `postgres`, `backend` и `frontend` одной командой;
+- ждут health-check всех контейнеров;
+- проверяют, что в базе создан только один активный администратор, всего пользователей `1`, отделений `0`;
+- проверяют, что вход под этим администратором действительно работает.
+
+Важно: это именно сценарий чистой установки. По умолчанию скрипты удаляют старые Docker volumes этого проекта. Для обычного повторного запуска без сброса данных используйте флаг `--keep-data` на macOS/Linux или `-KeepData` на Windows.
+
+### Что нужно скачать
+
+- Windows: `Docker Desktop for Windows` - <https://www.docker.com/products/docker-desktop/>
+- macOS: `Docker Desktop for Mac` - <https://www.docker.com/products/docker-desktop/>
+- Linux: `Docker Engine` - <https://docs.docker.com/engine/install/> и `Docker Compose plugin` - <https://docs.docker.com/compose/install/linux/>
+
+Больше ничего для запуска из каталога проекта не требуется.
+
+### Команда запуска
+
+macOS / Linux:
+
+```bash
+bash ./install.sh
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Windows CMD:
+
+```bat
+install.cmd
+```
+
+После завершения скрипт сам выведет:
+
+- адрес входа;
+- email администратора;
+- пароль администратора;
+- результат проверки, что в базе нет лишних пользователей и отделений.
+
+Если стандартные порты уже заняты на машине заказчика, install-скрипты сами выберут ближайшие свободные порты и покажут итоговый адрес входа в финальном сообщении.
+
+Если нужно заранее зафиксировать свои реквизиты администратора:
+
+macOS / Linux:
+
+```bash
+bash ./install.sh --admin-email=admin@hospital.local --admin-password=StrongPass123!
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -AdminEmail admin@hospital.local -AdminPassword StrongPass123!
+```
+
+Для повторного запуска без удаления данных:
+
+macOS / Linux:
+
+```bash
+bash ./install.sh --keep-data
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -KeepData
+```
+
+Важно: для заказчика не нужно выполнять `npm run db:seed`. Demo-пользователи и demo-структура предназначены только для локальной разработки.
+
+## Ручное развертывание через Docker Compose
 
 Проект можно развернуть на одном сервере внутри локальной сети больницы. Базовый сценарий выглядит так:
 
@@ -122,7 +204,7 @@ cp .env.example .env
 ```env
 POSTGRES_PASSWORD=strong-db-password
 JWT_SECRET=strong-jwt-secret
-FRONTEND_URLS=http://192.168.1.20:8080
+FRONTEND_URLS=http://localhost:8080,http://127.0.0.1:8080
 BOOTSTRAP_ADMIN_EMAIL=admin@hospital.local
 BOOTSTRAP_ADMIN_PASSWORD=StrongPass123!
 ```

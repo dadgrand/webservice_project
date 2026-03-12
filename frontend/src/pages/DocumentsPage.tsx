@@ -54,6 +54,7 @@ import {
 import { documentService } from '../services';
 import { useAuthStore, useHasPermission } from '../store/authStore';
 import { shellInnerPanelSx, shellInsetSurfaceSx, shellPanelSx } from '../styles/shell';
+import { normalizeUploadedFileName } from '../utils/fileName';
 import type {
   DocumentAudienceOptions,
   DocumentDistributionType,
@@ -243,6 +244,10 @@ function formatPersonName(person: { firstName: string; lastName: string; middleN
   return [person.lastName, person.firstName, person.middleName].filter(Boolean).join(' ');
 }
 
+function getDisplayFileName(fileName: string): string {
+  return normalizeUploadedFileName(fileName);
+}
+
 function getActionLabel(action: string): string {
   if (action === 'created') return 'Тред создан';
   if (action === 'approved') return 'Согласовано';
@@ -356,6 +361,7 @@ const DocumentFilePreview: React.FC<DocumentFilePreviewProps> = ({ threadId, fil
   const isImage = file.mimeType.startsWith('image/');
   const isVideo = file.mimeType.startsWith('video/');
   const isPdf = isPdfFile(file);
+  const displayFileName = getDisplayFileName(file.fileName);
 
   if (loading) {
     return <LinearProgress />;
@@ -446,7 +452,7 @@ const DocumentFilePreview: React.FC<DocumentFilePreviewProps> = ({ threadId, fil
         <Box
           component="img"
           src={previewUrl}
-          alt={file.fileName}
+          alt={displayFileName}
           sx={{
             maxWidth: '100%',
             maxHeight: 420,
@@ -469,7 +475,7 @@ const DocumentFilePreview: React.FC<DocumentFilePreviewProps> = ({ threadId, fil
   if (isPdf && previewUrl) {
     return (
       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, height: '78vh', overflow: 'hidden', bgcolor: '#fff' }}>
-        <iframe src={previewUrl} title={file.fileName} width="100%" height="100%" style={{ border: 0 }} />
+        <iframe src={previewUrl} title={displayFileName} width="100%" height="100%" style={{ border: 0 }} />
       </Box>
     );
   }
@@ -540,7 +546,7 @@ const DocumentsPage: React.FC = () => {
     return [...grouped.entries()]
       .map(([version, files]) => ({
         version,
-        files: [...files].sort((a, b) => a.fileName.localeCompare(b.fileName)),
+        files: [...files].sort((a, b) => getDisplayFileName(a.fileName).localeCompare(getDisplayFileName(b.fileName), 'ru')),
         isActive: files.some((file) => file.isActive),
         createdAt: files.reduce((latest, current) => (latest > current.createdAt ? latest : current.createdAt), files[0]?.createdAt ?? ''),
       }))
@@ -902,7 +908,7 @@ const DocumentsPage: React.FC = () => {
   const handleDeleteFile = async (file: DocumentThreadFile) => {
     if (!selectedThreadId) return;
 
-    const confirmed = window.confirm(`Удалить файл ${file.fileName} из активной версии?`);
+    const confirmed = window.confirm(`Удалить файл ${getDisplayFileName(file.fileName)} из активной версии?`);
     if (!confirmed) return;
 
     setIsSaving(true);
@@ -927,7 +933,7 @@ const DocumentsPage: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = file.fileName;
+      anchor.download = getDisplayFileName(file.fileName);
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -1042,7 +1048,7 @@ const DocumentsPage: React.FC = () => {
                     </Typography>
                     {thread.latestActiveFile && (
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        Последний файл: {thread.latestActiveFile.fileName}
+                        Последний файл: {getDisplayFileName(thread.latestActiveFile.fileName)}
                       </Typography>
                     )}
                     <Typography variant="caption" color="text.secondary">
@@ -1573,7 +1579,7 @@ const DocumentsPage: React.FC = () => {
                                 </Avatar>
                                 <Box sx={{ minWidth: 0 }}>
                                   <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word', lineHeight: 1.2 }}>
-                                    {file.fileName}
+                                    {getDisplayFileName(file.fileName)}
                                   </Typography>
                                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.35, mt: 0.15 }}>
                                     {formatFileSize(file.fileSize)} • {file.mimeType} • {formatDateTime(file.createdAt)} • {formatPersonName(file.uploadedBy)}
@@ -1596,7 +1602,7 @@ const DocumentsPage: React.FC = () => {
                                 <Button
                                   size="small"
                                   variant="outlined"
-                                  aria-label={`Предпросмотр ${file.fileName}`}
+                                  aria-label={`Предпросмотр ${getDisplayFileName(file.fileName)}`}
                                   startIcon={<Visibility />}
                                   onClick={(event) => {
                                     event.stopPropagation();
@@ -1608,7 +1614,7 @@ const DocumentsPage: React.FC = () => {
                                 <Button
                                   size="small"
                                   variant="outlined"
-                                  aria-label={`Скачать ${file.fileName}`}
+                                  aria-label={`Скачать ${getDisplayFileName(file.fileName)}`}
                                   startIcon={<CloudDownload />}
                                   onClick={(event) => {
                                     event.stopPropagation();
@@ -1621,7 +1627,7 @@ const DocumentsPage: React.FC = () => {
                                   <Button
                                     size="small"
                                     color="error"
-                                    aria-label={`Удалить ${file.fileName}`}
+                                    aria-label={`Удалить ${getDisplayFileName(file.fileName)}`}
                                     startIcon={<Delete />}
                                     onClick={(event) => {
                                       event.stopPropagation();
@@ -1751,7 +1757,7 @@ const DocumentsPage: React.FC = () => {
           {metadataFile ? (
             <Stack spacing={1}>
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                {metadataFile.fileName}
+                {getDisplayFileName(metadataFile.fileName)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Размер: {formatFileSize(metadataFile.fileSize)}
@@ -1826,7 +1832,7 @@ const DocumentsPage: React.FC = () => {
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="h6" noWrap sx={{ maxWidth: '70vw' }}>
-            {previewFile?.fileName || 'Предпросмотр файла'}
+            {previewFile ? getDisplayFileName(previewFile.fileName) : 'Предпросмотр файла'}
           </Typography>
           {previewFile && (
             <Button size="small" startIcon={<CloudDownload />} onClick={() => void handleDownloadFile(previewFile)}>
@@ -1992,7 +1998,7 @@ const DocumentsPage: React.FC = () => {
                 {createForm.files.map((file, index) => (
                   <Chip
                     key={`${file.fileUrl}-${index}`}
-                    label={`${file.fileName} (${formatFileSize(file.fileSize)})`}
+                    label={`${getDisplayFileName(file.fileName)} (${formatFileSize(file.fileSize)})`}
                     onDelete={() =>
                       setCreateForm((prev) => ({
                         ...prev,

@@ -94,6 +94,7 @@ function mapDraftToInboxMessage(draft: MessageDraft): InboxMessage {
       avatarUrl: null,
     },
     preview: buildMessagePreview(draft.content || ''),
+    hasAttachments: draft.attachments.length > 0,
     isStarred: false,
     canOrganize: false,
   };

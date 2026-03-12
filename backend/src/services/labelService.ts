@@ -249,6 +249,12 @@ export async function getMessagesByLabel(
                   avatarUrl: true,
                 },
               },
+              attachments: {
+                select: {
+                  id: true,
+                },
+                take: 1,
+              },
             },
           },
         },
@@ -286,6 +292,7 @@ export async function getMessagesByLabel(
     threadMessageCount: a.recipient.message.threadId ? threadCountMap.get(a.recipient.message.threadId) ?? 1 : 1,
     sender: a.recipient.message.sender,
     preview: buildTextPreview(a.recipient.message.content),
+    hasAttachments: a.recipient.message.attachments.length > 0,
     labels: a.recipient.labels.map((assignment) => ({
       id: assignment.label.id,
       name: assignment.label.name,

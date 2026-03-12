@@ -7,6 +7,30 @@ import { sendError, sendSuccess } from '../utils/response.js';
 import { config } from '../config/index.js';
 import * as documentService from '../services/documentService.js';
 
+function decodeOriginalFileName(originalName: string): string {
+  const hasCyrillic = /[А-Яа-яЁё]/.test(originalName);
+  const looksLikeMojibake = /[ÐÑÃ]/.test(originalName);
+  if (hasCyrillic || !looksLikeMojibake) {
+    return originalName;
+  }
+
+  try {
+    const decoded = Buffer.from(originalName, 'latin1').toString('utf8');
+    return decoded || originalName;
+  } catch {
+    return originalName;
+  }
+}
+
+function buildContentDisposition(disposition: 'attachment' | 'inline', fileName: string): string {
+  const asciiFallback = fileName
+    .replace(/[^\x20-\x7E]+/g, '_')
+    .replace(/["\\]/g, '_')
+    .trim() || 'file';
+
+  return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
 function handleServiceError(res: Response, error: unknown, fallbackMessage: string) {
   if (error instanceof documentService.DocumentServiceError) {
     return sendError(res, error.message, error.statusCode);
@@ -163,7 +187,7 @@ export async function uploadFile(req: AuthRequest, res: Response) {
 
     const attachment = {
       id: req.file.filename.split('.')[0],
-      fileName: req.file.originalname,
+      fileName: decodeOriginalFileName(req.file.originalname),
       fileUrl: req.file.filename,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
@@ -186,7 +210,8 @@ export async function downloadThreadFile(req: AuthRequest, res: Response) {
       return sendError(res, 'Файл отсутствует на диске', 404);
     }
 
-    return res.download(absolutePath, file.fileName);
+    res.setHeader('Content-Disposition', buildContentDisposition('attachment', file.fileName));
+    return res.sendFile(absolutePath);
   } catch (error) {
     return handleServiceError(res, error, 'Ошибка скачивания файла');
   }
@@ -204,7 +229,7 @@ export async function viewThreadFile(req: AuthRequest, res: Response) {
     }
 
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.fileName)}"`);
+    res.setHeader('Content-Disposition', buildContentDisposition('inline', file.fileName));
 
     return res.sendFile(absolutePath);
   } catch (error) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -13,9 +14,16 @@ import {
   ListItemText,
   Radio,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
-import { ArchiveOutlined, Folder as FolderIcon, Label as LabelIcon, MoveToInbox as InboxIcon } from '@mui/icons-material';
+import {
+  AddCircleOutline,
+  ArchiveOutlined,
+  Folder as FolderIcon,
+  Label as LabelIcon,
+  MoveToInbox as InboxIcon,
+} from '@mui/icons-material';
 import { messageService } from '../../../services';
 import { useMessageStore } from '../../../store/messageStore';
 import type { Message } from '../../../types';
@@ -43,6 +51,11 @@ const MessageOrganizationDialog: React.FC<MessageOrganizationDialogProps> = ({
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [threadMessageCount, setThreadMessageCount] = useState(0);
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderColor, setNewFolderColor] = useState('#4a97b5');
+  const [createFolderError, setCreateFolderError] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   useEffect(() => {
     if (!open || !mode || !messageId) {
@@ -51,6 +64,10 @@ const MessageOrganizationDialog: React.FC<MessageOrganizationDialogProps> = ({
       setSelectedLabelIds([]);
       setThreadMessageCount(0);
       setScopeDialogOpen(false);
+      setIsCreateFolderOpen(false);
+      setNewFolderName('');
+      setNewFolderColor('#4a97b5');
+      setCreateFolderError(null);
       return;
     }
 
@@ -114,6 +131,8 @@ const MessageOrganizationDialog: React.FC<MessageOrganizationDialogProps> = ({
 
   const closeAll = () => {
     setScopeDialogOpen(false);
+    setIsCreateFolderOpen(false);
+    setCreateFolderError(null);
     onClose();
   };
 
@@ -196,6 +215,30 @@ const MessageOrganizationDialog: React.FC<MessageOrganizationDialogProps> = ({
     );
   };
 
+  const handleCreateFolder = async () => {
+    const trimmedName = newFolderName.trim();
+    if (!trimmedName) {
+      setCreateFolderError('Введите название новой папки.');
+      return;
+    }
+
+    setCreatingFolder(true);
+    setCreateFolderError(null);
+    try {
+      const folder = await messageService.createFolder(trimmedName, newFolderColor);
+      await fetchFolders();
+      setSelectedFolderId(folder.id);
+      setNewFolderName('');
+      setNewFolderColor('#4a97b5');
+      setIsCreateFolderOpen(false);
+    } catch (error) {
+      console.error('Failed to create folder from organization dialog:', error);
+      setCreateFolderError('Не удалось создать новую папку.');
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
   return (
     <>
       <Dialog open={open && mode !== null} onClose={closeAll} fullWidth maxWidth="sm">
@@ -218,6 +261,65 @@ const MessageOrganizationDialog: React.FC<MessageOrganizationDialogProps> = ({
 
               {mode === 'folder' ? (
                 <>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                    <Typography variant="body2" color="text.secondary">
+                      Выберите папку назначения или создайте новую прямо здесь.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<AddCircleOutline />}
+                      onClick={() => {
+                        setIsCreateFolderOpen((prev) => !prev);
+                        setCreateFolderError(null);
+                      }}
+                    >
+                      Новая папка
+                    </Button>
+                  </Stack>
+
+                  {isCreateFolderOpen && (
+                    <Stack spacing={1}>
+                      {createFolderError && <Alert severity="error">{createFolderError}</Alert>}
+                      <TextField
+                        size="small"
+                        label="Название папки"
+                        value={newFolderName}
+                        onChange={(event) => setNewFolderName(event.target.value)}
+                        autoFocus
+                        fullWidth
+                      />
+                      <TextField
+                        size="small"
+                        label="Цвет папки"
+                        type="color"
+                        value={newFolderColor}
+                        onChange={(event) => setNewFolderColor(event.target.value)}
+                        sx={{ '& input': { minHeight: 44 } }}
+                      />
+                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Button
+                          size="small"
+                          color="inherit"
+                          onClick={() => {
+                            setIsCreateFolderOpen(false);
+                            setCreateFolderError(null);
+                          }}
+                        >
+                          Отмена
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => void handleCreateFolder()}
+                          disabled={creatingFolder}
+                        >
+                          {creatingFolder ? 'Создание...' : 'Создать папку'}
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  )}
+
                   {availableFolders.length > 0 ? (
                     <List sx={{ p: 0 }}>
                       {availableFolders.map((folder) => (

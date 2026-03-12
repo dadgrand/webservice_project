@@ -1,6 +1,16 @@
 
 import prisma from '../config/database.js';
 
+export class OrgTreeServiceError extends Error {
+  statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.name = 'OrgTreeServiceError';
+    this.statusCode = statusCode;
+  }
+}
+
 export interface OrgTreeNodeDto {
   id: string;
   parentId: string | null;
@@ -23,6 +33,49 @@ export interface OrgTreeNodeDto {
     position: string | null;
     avatarUrl: string | null;
   };
+}
+
+async function ensureValidParentAssignment(parentId: string | null | undefined, nodeId?: string): Promise<void> {
+  if (parentId === undefined || parentId === null) {
+    return;
+  }
+
+  if (nodeId && parentId === nodeId) {
+    throw new OrgTreeServiceError('Нельзя назначить узел родителем самому себе');
+  }
+
+  const parent = await prisma.orgTreeNode.findUnique({
+    where: { id: parentId },
+    select: { id: true, parentId: true },
+  });
+
+  if (!parent) {
+    throw new OrgTreeServiceError('Родительский узел не найден', 404);
+  }
+
+  if (!nodeId) {
+    return;
+  }
+
+  let currentParentId: string | null = parent.id;
+  const visited = new Set<string>();
+
+  while (currentParentId) {
+    if (currentParentId === nodeId) {
+      throw new OrgTreeServiceError('Нельзя создавать циклические связи в структуре');
+    }
+
+    if (visited.has(currentParentId)) {
+      break;
+    }
+
+    visited.add(currentParentId);
+    const currentNode: { parentId: string | null } | null = await prisma.orgTreeNode.findUnique({
+      where: { id: currentParentId },
+      select: { parentId: true },
+    });
+    currentParentId = currentNode?.parentId ?? null;
+  }
 }
 
 // Получить все узлы дерева
@@ -71,8 +124,13 @@ export async function createNode(data: {
   linkedUserId?: string;
   customTitle?: string;
   customSubtitle?: string;
+  customImageUrl?: string | null;
+  linkUrl?: string | null;
+  isVisible?: boolean;
   style?: any;
 }): Promise<OrgTreeNodeDto> {
+  await ensureValidParentAssignment(data.parentId);
+
   const node = await prisma.orgTreeNode.create({
     data: {
       parentId: data.parentId,
@@ -81,7 +139,10 @@ export async function createNode(data: {
       linkedUserId: data.linkedUserId,
       customTitle: data.customTitle,
       customSubtitle: data.customSubtitle,
+      customImageUrl: data.customImageUrl ?? null,
+      linkUrl: data.linkUrl ?? null,
       style: data.style || {},
+      isVisible: data.isVisible ?? true,
     },
     include: {
       department: { select: { id: true, name: true } },
@@ -120,28 +181,34 @@ export async function updateNode(
   id: string,
   data: {
     parentId?: string | null;
+    type?: string;
     style?: any; // Для сохранения позиции x, y
     linkedUserId?: string | null;
     departmentId?: string | null;
     customTitle?: string;
     customSubtitle?: string;
     customImageUrl?: string;
+    linkUrl?: string;
     isVisible?: boolean;
   }
 ): Promise<OrgTreeNodeDto | null> {
   const existing = await prisma.orgTreeNode.findUnique({ where: { id } });
   if (!existing) return null;
 
+  await ensureValidParentAssignment(data.parentId, id);
+
   const node = await prisma.orgTreeNode.update({
     where: { id },
     data: {
       parentId: data.parentId, // Может быть null для корневых узлов
+      type: data.type,
       style: data.style ? { ...((existing.style as object) || {}), ...data.style } : undefined,
       linkedUserId: data.linkedUserId,
       departmentId: data.departmentId,
       customTitle: data.customTitle,
       customSubtitle: data.customSubtitle,
       customImageUrl: data.customImageUrl,
+      linkUrl: data.linkUrl,
       isVisible: data.isVisible,
     },
     include: {

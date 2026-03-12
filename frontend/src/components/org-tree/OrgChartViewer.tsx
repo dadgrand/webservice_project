@@ -14,8 +14,9 @@ import ReactFlow, {
   Panel,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
- import { Box, Button, CircularProgress, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { Box, Button, CircularProgress, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
 import { Save, Add, Edit, Delete, AddCircle } from '@mui/icons-material';
+import { useBeforeUnload } from 'react-router-dom';
 import OrgTreeNode, { ORG_TREE_NODE_HEIGHT, ORG_TREE_NODE_WIDTH } from './OrgTreeNode';
 import NodeEditDialog from './NodeEditDialog';
 import { orgTreeService } from '../../services';
@@ -98,6 +99,37 @@ const layoutNodes = (nodes: Node[], edges: Edge[]): Node[] => {
   }));
 };
 
+function wouldCreateCycle(sourceId: string, targetId: string, edges: Edge[]): boolean {
+  if (sourceId === targetId) {
+    return true;
+  }
+
+  const parentByNodeId = new Map<string, string>();
+  edges.forEach((edge) => {
+    if (edge.target !== targetId) {
+      parentByNodeId.set(edge.target, edge.source);
+    }
+  });
+
+  let currentId: string | undefined = sourceId;
+  const visited = new Set<string>();
+
+  while (currentId) {
+    if (currentId === targetId) {
+      return true;
+    }
+
+    if (visited.has(currentId)) {
+      break;
+    }
+
+    visited.add(currentId);
+    currentId = parentByNodeId.get(currentId);
+  }
+
+  return false;
+}
+
 const OrgChartViewer: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, baseOnEdgesChange] = useEdgesState(initialEdges);
@@ -121,6 +153,25 @@ const OrgChartViewer: React.FC = () => {
 
   const { user } = useAuthStore();
   const isAdmin = user?.isAdmin ?? false;
+
+  useBeforeUnload(
+    useCallback((event) => {
+      if (!isDirty) {
+        return;
+      }
+
+      event.preventDefault();
+      event.returnValue = '';
+    }, [isDirty])
+  );
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('org-tree-dirty-state', { detail: { isDirty } }));
+
+    return () => {
+      window.dispatchEvent(new CustomEvent('org-tree-dirty-state', { detail: { isDirty: false } }));
+    };
+  }, [isDirty]);
 
   const onEdgesChange = useCallback<typeof baseOnEdgesChange>((changes) => {
     baseOnEdgesChange(changes);
@@ -174,11 +225,32 @@ const OrgChartViewer: React.FC = () => {
 
   const onConnect = useCallback(
     (params: Connection) => {
+      if (!params.source || !params.target) {
+        return;
+      }
+
+      let hasChanges = false;
       setEdges((edgesState) => {
+        if (wouldCreateCycle(params.source!, params.target!, edgesState)) {
+          window.alert('Нельзя создать циклическую связь в структуре.');
+          return edgesState;
+        }
+
         const withoutExistingParent = edgesState.filter((edge) => edge.target !== params.target);
-        return addEdge(params, withoutExistingParent);
+        hasChanges = true;
+        return addEdge(
+          {
+            ...params,
+            type: 'smoothstep',
+            animated: false,
+            style: { stroke: '#b1b1b7', strokeWidth: 2 },
+          },
+          withoutExistingParent
+        );
       });
-      setIsDirty(true);
+      if (hasChanges) {
+        setIsDirty(true);
+      }
     },
     [setEdges]
   );
@@ -299,6 +371,7 @@ const OrgChartViewer: React.FC = () => {
   const allNodesList = treeData.map(n => ({
     id: n.id,
     label: n.customTitle || n.linkedUser?.position || n.department?.name || 'Узел',
+    parentId: n.parentId,
   }));
 
   if (loading) {

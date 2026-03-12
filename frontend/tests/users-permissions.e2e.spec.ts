@@ -10,6 +10,10 @@ const TEMP_USER = {
   firstName: 'Права',
   lastName: 'Проверка',
 };
+const TEMP_DEPARTMENT = {
+  name: `Отделение-${SUFFIX}`,
+  updatedName: `Отделение-${SUFFIX}-обновлено`,
+};
 
 async function login(page: Page, creds: Credentials): Promise<void> {
   await loginViaApi(page, creds);
@@ -31,10 +35,24 @@ async function openUsers(page: Page): Promise<void> {
   await expect(page.getByRole('button', { name: 'Добавить пользователя' })).toBeVisible();
 }
 
+async function openDepartments(page: Page): Promise<void> {
+  await openUsers(page);
+  await page.getByRole('tab', { name: 'Отделения' }).click();
+  await expect(page.getByRole('button', { name: 'Добавить отделение' })).toBeVisible();
+}
+
 async function searchUserRow(page: Page, email: string) {
   const searchInput = page.getByPlaceholder('Поиск по ФИО, email, должности и отделению');
   await searchInput.fill(email);
   const row = page.locator('tr', { hasText: email }).first();
+  await expect(row).toBeVisible();
+  return row;
+}
+
+async function searchDepartmentRow(page: Page, name: string) {
+  const searchInput = page.getByPlaceholder('Поиск по названию, описанию, руководителю и родителю');
+  await searchInput.fill(name);
+  const row = page.locator('tr', { hasText: name }).first();
   await expect(row).toBeVisible();
   return row;
 }
@@ -152,6 +170,79 @@ test('admin can grant all permissions to one user without errors', async ({ page
   } finally {
     if (adminApi && createdUserId) {
       await adminApi.delete(`users/${createdUserId}`).catch(() => null);
+    }
+    await adminApi?.dispose();
+  }
+});
+
+test('admin can manage departments from users page', async ({ page }) => {
+  test.setTimeout(180_000);
+
+  let adminApi: APIRequestContext | null = null;
+  let createdDepartmentId: string | null = null;
+
+  try {
+    await login(page, ADMIN);
+    adminApi = await createApiClient(page);
+
+    await openDepartments(page);
+    await assertNoVisibleErrors(page);
+
+    await page.getByRole('button', { name: 'Добавить отделение' }).click();
+    const createDialog = page.getByRole('dialog', { name: 'Новое отделение' });
+    await expect(createDialog).toBeVisible();
+    await createDialog.getByLabel('Название *').fill(TEMP_DEPARTMENT.name);
+    await createDialog.getByLabel('Описание').fill('Тестовое отделение для e2e');
+    await createDialog.getByRole('button', { name: 'Создать' }).click();
+    await expect(createDialog).toBeHidden();
+    await assertNoVisibleErrors(page);
+
+    const createdRow = await searchDepartmentRow(page, TEMP_DEPARTMENT.name);
+    const createdDepartmentsResponse = await adminApi.get('contacts/departments');
+    expect(createdDepartmentsResponse.ok()).toBeTruthy();
+    const createdDepartmentsBody = await createdDepartmentsResponse.json();
+    createdDepartmentId =
+      createdDepartmentsBody.data.find((department: { name: string }) => department.name === TEMP_DEPARTMENT.name)?.id ?? null;
+    expect(createdDepartmentId).toBeTruthy();
+
+    await createdRow.locator('button').nth(0).click();
+    const editDialog = page.getByRole('dialog', { name: 'Редактировать отделение' });
+    await expect(editDialog).toBeVisible();
+    await editDialog.getByLabel('Название *').fill(TEMP_DEPARTMENT.updatedName);
+    await editDialog.getByLabel('Порядок').fill('42');
+    await editDialog.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(editDialog).toBeHidden();
+    await assertNoVisibleErrors(page);
+
+    await searchDepartmentRow(page, TEMP_DEPARTMENT.updatedName);
+    const updatedDepartmentsResponse = await adminApi.get('contacts/departments');
+    expect(updatedDepartmentsResponse.ok()).toBeTruthy();
+    const updatedDepartmentsBody = await updatedDepartmentsResponse.json();
+    const updatedDepartment = updatedDepartmentsBody.data.find(
+      (department: { id: string; name: string; order: number }) => department.id === createdDepartmentId
+    );
+    expect(updatedDepartment?.name).toBe(TEMP_DEPARTMENT.updatedName);
+    expect(updatedDepartment?.order).toBe(42);
+
+    const deleteRow = await searchDepartmentRow(page, TEMP_DEPARTMENT.updatedName);
+    await deleteRow.locator('button').nth(1).click();
+    const deleteDialog = page.getByRole('dialog', { name: 'Удалить отделение?' });
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole('button', { name: 'Удалить' }).click();
+    await expect(deleteDialog).toBeHidden();
+    await expect(page.locator('tr', { hasText: TEMP_DEPARTMENT.updatedName })).toHaveCount(0);
+    await assertNoVisibleErrors(page);
+
+    const deletedDepartmentsResponse = await adminApi.get('contacts/departments');
+    expect(deletedDepartmentsResponse.ok()).toBeTruthy();
+    const deletedDepartmentsBody = await deletedDepartmentsResponse.json();
+    expect(
+      deletedDepartmentsBody.data.some((department: { id: string }) => department.id === createdDepartmentId)
+    ).toBeFalsy();
+    createdDepartmentId = null;
+  } finally {
+    if (adminApi && createdDepartmentId) {
+      await adminApi.delete(`contacts/departments/${createdDepartmentId}`).catch(() => null);
     }
     await adminApi?.dispose();
   }

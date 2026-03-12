@@ -21,6 +21,11 @@ import RichTextEditor from './RichTextEditor';
 import RecipientInput from './RecipientInput';
 import AttachmentUpload from './AttachmentUpload';
 
+function formatQuotedSender(firstName: string, lastName: string, email: string): string {
+  const fullName = `${firstName} ${lastName}`.trim();
+  return email ? `${fullName} &lt;${email}&gt;` : fullName;
+}
+
 const ComposeDialog: React.FC = () => {
   const { composeOpen, replyToMessage, forwardMessage, saveDraft, presetRecipientIds, editingDraft, resetComposeContext } = useMessageStore();
   const [subject, setSubject] = useState('');
@@ -55,14 +60,26 @@ const ComposeDialog: React.FC = () => {
         setRecipientIds(presetRecipientIds.length > 0 ? presetRecipientIds : [replyToMessage.sender.id]);
         setCcIds([]);
         setBccIds([]);
-        setContent(`<p><br><br></p><blockquote>От кого: ${replyToMessage.sender.firstName} ${replyToMessage.sender.lastName}<br>Дата: ${new Date(replyToMessage.createdAt).toLocaleString()}<br><br>${replyToMessage.content}</blockquote>`);
+        setContent(
+          `<p><br><br></p><blockquote>От кого: ${formatQuotedSender(
+            replyToMessage.sender.firstName,
+            replyToMessage.sender.lastName,
+            replyToMessage.sender.email
+          )}<br>Дата: ${new Date(replyToMessage.createdAt).toLocaleString()}<br><br>${replyToMessage.content}</blockquote>`
+        );
         setAttachments([]);
       } else if (forwardMessage) {
         setSubject(forwardMessage.subject.startsWith('Fwd:') ? forwardMessage.subject : `Fwd: ${forwardMessage.subject}`);
         setRecipientIds([]);
         setCcIds([]);
         setBccIds([]);
-        setContent(`<p><br><br></p><blockquote>---------- Пересылаемое сообщение ----------<br>От кого: ${forwardMessage.sender.firstName} ${forwardMessage.sender.lastName}<br>Дата: ${new Date(forwardMessage.createdAt).toLocaleString()}<br>Тема: ${forwardMessage.subject}<br><br>${forwardMessage.content}</blockquote>`);
+        setContent(
+          `<p><br><br></p><blockquote>---------- Пересылаемое сообщение ----------<br>От кого: ${formatQuotedSender(
+            forwardMessage.sender.firstName,
+            forwardMessage.sender.lastName,
+            forwardMessage.sender.email
+          )}<br>Дата: ${new Date(forwardMessage.createdAt).toLocaleString()}<br>Тема: ${forwardMessage.subject}<br><br>${forwardMessage.content}</blockquote>`
+        );
         setAttachments(forwardMessage.attachments || []); // Copy attachments? Usually yes but separate files
         // Ideally we should clone attachments or download and re-upload logic, 
         // but simple link might not work if permissions are strict. 

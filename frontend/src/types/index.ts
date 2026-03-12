@@ -158,6 +158,7 @@ export interface InboxMessage {
     avatarUrl: string | null;
   };
   preview: string;
+  hasAttachments: boolean;
   labels?: MessageLabel[];
   isStarred?: boolean;
   canOrganize: boolean;
